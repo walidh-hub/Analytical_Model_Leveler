@@ -1004,8 +1004,8 @@ classdef LevelerApp < matlab.apps.AppBase
             l_cat3 = uilabel(gi, 'Text', '--- INPUT DEFECTS ---', 'FontAngle', 'italic', 'FontWeight', 'bold');
             l_cat3.Layout.Row = r_idx; l_cat3.Layout.Column = [1 2]; r_idx = r_idx + 1;
 
-            addRowInfo('Curvature K0:', [num2str(S.Defects.K0_Geo) ' 1/m']);
-            addRowInfo('Crossbow KT:', [num2str(S.Defects.K_Trans_Geo) ' 1/m']);
+            addRowInfo('Curvature K0:', [num2str(S.Defects.K0_Geo * 1000) ' 1/m']);
+            addRowInfo('Crossbow KT:', [num2str(S.Defects.K_Trans_Geo * 1000) ' 1/m']);
             addRowInfo('Residual Stress:', [num2str(S.Defects.Sig_Long) ' MPa']);
             addRowInfo('Wave Height (H):', [num2str(S.Defects.H_mm) ' mm']);
             addRowInfo('Wave Pitch (L):', [num2str(S.Defects.L_mm) ' mm']);

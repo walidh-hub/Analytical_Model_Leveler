@@ -384,7 +384,7 @@ function [Metrics, Data] = Leveler_Kernel_CIM(p)
     M_End = sum(Sigma_Exit .* z_layers * dz * p.W);
     dK_End = M_End / (p.E * I0);
     
-    K_Final = kappa_history(end) - dK_End;
+    K_Final = kappa_history(end) + dK_End;
     springback_stress = (M_End / I0) * z_layers;
     Sigma_Res = Sigma_Exit - springback_stress;
     
