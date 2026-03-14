@@ -1177,7 +1177,7 @@ classdef LevelerApp < matlab.apps.AppBase
                 %i_units = 0;
                 %if isfield(S.Defects, 'I_Units'), i_units = S.Defects.I_Units; end
 
-                infoStr = sprintf("Sheet Loaded \nThickness: %.1f mm | Width: %.0f mm\nSy: %.0f MPa | E: %.0f MPa\nDefact: K0=%.1f", ...
+                infoStr = sprintf("Sheet Loaded \nThickness: %.1f mm | Width: %.0f mm\nSy: %.0f MPa | E: %.0f MPa\nDefact: K0=%.4f", ...
                     S.Geo.t, S.Geo.W, S.Mat.Sy, S.Mat.E, S.Defects.K0_Geo);
 
 

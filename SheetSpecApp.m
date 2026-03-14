@@ -225,7 +225,7 @@ classdef SheetSpecApp < matlab.apps.AppBase
             
             % --- PLOTTING MIGLIORATO ---
             hold(app.Ax_Mat, 'off'); % Forza reset dello stato hold
-            cla(app.Ax_Mat);         % Pulisce completamente l'asse
+            cla(app.Ax_Mat, 'reset');         % Pulisce completamente l'asse
             hold(app.Ax_Mat, 'on');  % Riattiva hold per i nuovi grafici sovrapposti
             
             % 1. Fascia Elastica (Area ammissibile corrente)
@@ -250,72 +250,67 @@ classdef SheetSpecApp < matlab.apps.AppBase
 
 
         function update3DPreview(app)
-            W = app.Edit_W.Value; L_viz = 2000;
-            % 1. Aumentiamo la risoluzione della mesh per vedere meglio le onde 
-            [X, Y] = meshgrid(linspace(0, L_viz, 120), linspace(-W/2, W/2, 80));
+            % 1. Griglia di visualizzazione (2 metri di lunghezza)
+            W = app.Edit_W.Value;
+            [X, Y] = meshgrid(linspace(0, 2000, 150), linspace(-W/2, W/2, 80));
             
-            K0 = app.Sld_K0.Value * 1e-3; KT = app.Sld_KT.Value * 1e-3;
-            Z_geo = 0.5 * K0 * X.^2 + 0.5 * KT * Y.^2;
+            % 2. Geometria della Curvatura (Coil Set di Input)
+            % Leggiamo direttamente lo slider K0
+            K0 = app.Sld_K0.Value * 1e-3; 
             
-            H = app.Sld_H.Value; Lambda = app.Sld_L.Value;
-            if Lambda == 0, Lambda = 1; end
+            % if abs(K0) > 1e-9
+            %     % Usiamo la parabola (approssimazione corretta per piccoli spostamenti)
+            %     % per evitare errori di numeri complessi su curvature elevate
+            %     Z_Coil = 0.5 * K0 * X.^2;
+            % else
+            %     Z_Coil = 0;
+            % end
 
+            % Calcolo geometria circolare esatta con protezione numeri complessi
+            if abs(K0) > 1e-9
+                R = 1/K0;
+                % Usiamo max(0, ...) per evitare radici di numeri negativi
+                Z_Coil = R - sign(R) * sqrt(max(0, R^2 - X.^2));
+                
+                % Opzionale: "Nascondi" i punti oltre il raggio (dove la lamiera si chiuderebbe)
+                Z_Coil(X > abs(R)) = NaN; 
+            else
+                Z_Coil = 0;
+            end
+
+            % 3. Geometria delle Onde (Difetti di planarità)
+            H = app.Sld_H.Value;
+            L = app.Sld_L.Value; if L <= 0, L = 500; end
             
             y_norm_sq = (2*Y/W).^2;
-            type = app.Drop_WaveType.Value;
-            
-            if strcmp(type, 'Edge Waves')
-                profile = y_norm_sq; % Lungo ai bordi (0 al centro, 1 ai bordi)
-            elseif strcmp(type, 'Center Buckles')
-                profile = (1 - y_norm_sq); % Lungo al centro (1 al centro, 0 ai bordi)
-            else
-                profile = (y_norm_sq - 0.5); % Vecchio stile bilanciato
+            switch app.Drop_WaveType.Value
+                case 'Edge Waves',      prof = y_norm_sq;
+                case 'Center Buckles',  prof = (1 - y_norm_sq);
+                otherwise,              prof = (y_norm_sq - 0.5); % Balanced
             end
             
-            Z_wave = (H / 2) * profile .* sin(2*pi*X/Lambda);
-            Z_tot = Z_geo + Z_wave;
+            Z_Wave = (H / 2) * prof .* sin(2*pi*X/L);
             
-            [i_unit, status_col] = app.calculateFlatness();
-            
-            % --- CORREZIONE: Sig_W rimosso, mostriamo solo stress latente ---
-            Sig_L = app.Sld_SigL.Value; 
-            Sig_T = app.Sld_SigT.Value * (y_norm_sq - 0.5); 
-            ColorData = Sig_L + Sig_T + (Z_wave * 2);
+            % 4. Superficie Totale
+            Z_tot = Z_Coil + Z_Wave;
 
-            surf(app.Ax_3D, X, Y, Z_tot, ColorData, 'EdgeColor', 'none', 'FaceColor', 'interp');
-            % --- SETUP GRAFICO "FISICA PURA" ---
-            axis(app.Ax_3D, 'equal');       % Proporzioni 1:1 Reali (1mm = 1mm)
-            axis(app.Ax_3D, 'tight');       % Adatta i limiti ai dati
-            view(app.Ax_3D, [-45 30]);      % Vista standard
-            
-            % Colormap jet evidenzia meglio le creste e gli avvallamenti 
-            colormap(app.Ax_3D, 'jet'); 
-            
-            % Aggiunta luci per enfatizzare la tridimensionalità delle onde
-            camlight(app.Ax_3D, 'headlight'); lighting(app.Ax_3D, 'gouraud');
-            grid(app.Ax_3D, 'on'); 
-            box(app.Ax_3D, 'on');
-            
-            % cb = colorbar(app.Ax_3D);
-            % cb.Label.String = 'Relative Stress / Elevation [MPa]';
+            % 5. Rendering (Colorazione basata sull'ampiezza dell'onda per contrasto)
+            surf(app.Ax_3D, X, Y, Z_tot, Z_Wave, 'EdgeColor', 'none', 'FaceColor', 'interp');
 
-            % Etichette
-            xlabel(app.Ax_3D, 'Length [mm]'); ylabel(app.Ax_3D, 'Width [mm]'); zlabel(app.Ax_3D, 'Z [mm]');
-            
-            % Aggiornamento Info Planarità
-            [i_unit, status_col] = app.calculateFlatness();
-            delete(findall(app.Ax_3D, 'Tag', 'FlatnessTag'));
-            text(app.Ax_3D, 0, W/2, max(Z_tot(:))*1.2, sprintf('Flatness: %.1f I-Units', i_unit), ...
-                'FontSize', 14, 'FontWeight', 'bold', 'Color', status_col, 'BackgroundColor', 'w', 'Tag', 'FlatnessTag');
+            % Setup Estetico
+            axis(app.Ax_3D, 'equal'); axis(app.Ax_3D, 'tight'); view(app.Ax_3D, [-45 30]);
+            colormap(app.Ax_3D, 'jet'); camlight(app.Ax_3D, 'headlight'); lighting(app.Ax_3D, 'gouraud');
+            grid(app.Ax_3D, 'on');
+            title(app.Ax_3D, sprintf('Initial Sheet Geometry | K_0: %.4f', app.Sld_K0.Value));
         end
 
         function [i_unit, col] = calculateFlatness(app)
             H = app.Sld_H.Value; L = app.Sld_L.Value;
             if L <= 0, i_unit = 0; col = [0 0.5 0]; return; end
             i_unit = (H/L)^2 * 246760;
-            if i_unit < 5, col = [0 0.7 0]; 
-            elseif i_unit < 20, col = [0.8 0.8 0]; 
-            elseif i_unit < 42, col = [0.9 0.5 0]; 
+            if i_unit < 5, col = [0 0.7 0];
+            elseif i_unit < 20, col = [0.8 0.8 0];
+            elseif i_unit < 42, col = [0.9 0.5 0];
             else, col = [1 0 0]; end
         end
 
@@ -384,7 +379,7 @@ classdef SheetSpecApp < matlab.apps.AppBase
             
             % Main Grid: 2 rows x 2 columns
             app.GridControls = uigridlayout(app.ControlFigure, [2, 2]); 
-            app.GridControls.RowHeight = {'1x', '1x'};
+            app.GridControls.RowHeight = {'1x', '0.5x'};
             app.GridControls.ColumnWidth = {'1x', '1x'};
             app.GridControls.Padding = [15 15 15 15];
             app.GridControls.RowSpacing = 15;
@@ -414,7 +409,7 @@ classdef SheetSpecApp < matlab.apps.AppBase
             app.Pnl_Trans.Layout.Column = 2;
             
             gl_t = uigridlayout(app.Pnl_Trans, [5, 1]); % 5 rows to include Wave Type
-            gl_t.RowHeight = {60, 60, 60, 60, 40};
+            gl_t.RowHeight = {'1x', '1x', '1x', '1x', 40};
 
             app.createSmartSlider(gl_t, 1, 'Geometric Crossbow [1000/m]', -5, 5, 0.5, 'KT');
             app.createSmartSlider(gl_t, 2, 'Crossbow Stress [MPa]', -300, 300, 50, 'SigT');
@@ -432,7 +427,7 @@ classdef SheetSpecApp < matlab.apps.AppBase
             app.Pnl_Long.Layout.Column = 1;
             
             gl_l = uigridlayout(app.Pnl_Long, [2, 1]); 
-            gl_l.RowHeight = {60, 60};
+            gl_l.RowHeight = {'1x', '1x'};
             
             app.createSmartSlider(gl_l, 1, 'Longitudinal Curvature K0 [1000/m]', -5, 5, -0.2, 'K0');
             app.createSmartSlider(gl_l, 2, 'Surface Residual Stress [MPa]', -300, 300, -100, 'SigL');

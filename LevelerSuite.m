@@ -58,7 +58,7 @@ classdef LevelerSuite < matlab.apps.AppBase
             app.BtnSim.Layout.Row = 3;
 
             % Footer
-            app.LblCredit = uilabel(app.GridMain, 'Text', 'Powered by SmartLeveler.it', ...
+            app.LblCredit = uilabel(app.GridMain, 'Text', 'Powered by SmartLeveler.ai', ...
                 'HorizontalAlignment', 'center', 'FontColor', [0.6 0.6 0.6]);
             app.LblCredit.Layout.Row = 4;
         end
