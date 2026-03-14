@@ -175,8 +175,8 @@ classdef LevelerApp < matlab.apps.AppBase
             % end
 
             % Parametri Analisi
-            is3D = strcmp(mode, 'Multi-Strip (3D)');
-            y_strips = linspace(-base.W/2, base.W/2, nStrips);
+            %is3D = strcmp(mode, 'Multi-Strip (3D)');
+            %y_strips = linspace(-base.W/2, base.W/2, nStrips);
 
             d = uiprogressdlg(app.UIFigure, 'Title', 'Simulation Log...', 'Message', '--- Inizio Sessione ---', 'Cancelable', 'off');
 
@@ -1174,11 +1174,11 @@ classdef LevelerApp < matlab.apps.AppBase
                 app.CurrentSheetData = S;
 
                 % Aggiorna Label Informativa
-                i_units = 0;
-                if isfield(S.Defects, 'I_Units'), i_units = S.Defects.I_Units; end
+                %i_units = 0;
+                %if isfield(S.Defects, 'I_Units'), i_units = S.Defects.I_Units; end
 
-                infoStr = sprintf("Sheet Loaded \nThickness: %.1f mm | Width: %.0f mm\nSy: %.0f MPa | E: %.0f MPa\nDefact: H=%.1f L=%.0f (%.1f IU)", ...
-                    S.Geo.t, S.Geo.W, S.Mat.Sy, S.Mat.E, S.Defects.H_mm, S.Defects.L_mm, i_units);
+                infoStr = sprintf("Sheet Loaded \nThickness: %.1f mm | Width: %.0f mm\nSy: %.0f MPa | E: %.0f MPa\nDefact: K0=%.1f", ...
+                    S.Geo.t, S.Geo.W, S.Mat.Sy, S.Mat.E, S.Defects.K0_Geo);
 
 
                 app.Lbl_SheetInfo.Text = infoStr;
