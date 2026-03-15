@@ -411,6 +411,13 @@ function [Metrics, Data] = Leveler_Kernel_CIM(p)
         % Salviamo la colonna: 1 se plastico, 0 se elastico
         Yield_Rolls_Map(:, i) = yield_state_history(idx_cen, :)';
     end
+
+    %Estrazione Angoli di Contatto per l'App ---
+    Contact_Angles_Rad = zeros(p.N, 1);
+    for i = 1:p.N
+        % Il segmento 'i' termina esattamente sul rullo 'i'
+        Contact_Angles_Rad(i) = atan(Segments(i).Slope(end));
+    end
     
     Metrics.Max_Stress = max(max(abs(stress_history)));
     Metrics.Max_Total_Stress = Metrics.Max_Stress;
@@ -426,6 +433,7 @@ function [Metrics, Data] = Leveler_Kernel_CIM(p)
     Data.Roll_Residuals = Roll_Residuals;
     Data.Yield_Rolls = Yield_Rolls_Map;
     Data.Segments = Segments;
+    Data.Contact_Angles_Rad = Contact_Angles_Rad;
     Data.Plastic_Profile = plastic_profile;
     Data.Alpha_Final = alpha_current;
     Data.Eps_Pl_Final = eps_pl_cum;

@@ -608,7 +608,7 @@ classdef LevelerApp < matlab.apps.AppBase
 
             % Disegna le Mappe
             safe_contour(app.Ax_StressMap, res.S, 'Residual stress [MPa]');
-            safe_contour(app.Ax_CurvMap, abs(res.C)*1000, 'Curvature [1/m]');
+            safe_contour(app.Ax_CurvMap, abs(res.C), 'Curvature [1/m]');
             %safe_contour(app.Ax_FlatnessMap, res.FlatnessError, 'Planarity [I-Units]');
             %safe_contour(app.Ax_CrossbowMap, res.XB * 1000, 'Crossbow [1/m]');
 
@@ -622,6 +622,8 @@ classdef LevelerApp < matlab.apps.AppBase
             % 3. Calcola Dettagli per il punto selezionato
             [M, D] = Leveler_Kernel_CIM(p);
             D.Curvature = M.Curvature;
+            D.Residual_Stress_Surface = M.Residual_Stress_Surface;
+            D.Max_Total_Stress = M.Max_Total_Stress;
             D.p = p;
 
             % --- ADAPTER: Compatibilità CIM -> App ---
@@ -659,7 +661,7 @@ classdef LevelerApp < matlab.apps.AppBase
             x_lims = [-p.P, (p.N+1)*p.P];
 
 
-            % --- Grafico 1: Macchina & Linea Elastica (Metodo Ricostruzione Robusta) ---
+            % --- Grafico 1: Macchina & Linea Elastica ---
             ax = app.Ax_Machine;
             cla(ax); grid(ax, 'on'); hold(ax, 'on'); box(ax, 'on'); axis(ax, 'equal');
 
@@ -703,19 +705,12 @@ classdef LevelerApp < matlab.apps.AppBase
                 % Centro Rullo (+)
                 plot(ax, cx, cy, 'k+', 'MarkerSize', 6);
 
-                % --- NUOVO: PUNTO DI CONTATTO E ANGOLO (Solo se i dati CIM esistono) ---
-                if isfield(D, 'Segments') && length(D.Segments) >= i
-                    % Nota: Il segmento 'i' termina esattamente sul rullo 'i' (Nodo i+1)
-                    % per via del tavolo di ingresso virtuale aggiunto nel Kernel v2.
+                % --- NUOVO: PUNTO DI CONTATTO E ANGOLO (Dati dal Kernel) ---
+                if isfield(D, 'Contact_Angles_Rad') && length(D.Contact_Angles_Rad) >= i
+                    
+                    angle_rad = D.Contact_Angles_Rad(i);
+                    angle_deg = angle_rad * (180 / pi); % Più leggibile per l'utente
 
-                    % x_cnt = D.Segments(i).x_global(end);
-                    % y_cnt = D.Segments(i).Deflection(end);
-
-                    %ALTERNATIVA
-                    % 1. Calcola l'angolo
-                    angle_rad = atan(D.Segments(i).Slope(end));
-
-                    % 2. DEFINISCI IL RAGGIO EFFICACE
                     R_eff_plot = Mchn.R + p.t/2;
                     
                     % Calcolo coordinate reali del punto di tangenza
@@ -723,32 +718,23 @@ classdef LevelerApp < matlab.apps.AppBase
                         % Rullo Dispari (Inferiore): la lamiera poggia sopra
                         x_cnt = cx - R_eff_plot * sin(angle_rad);
                         y_cnt = cy + R_eff_plot * cos(angle_rad);
+                        txt_y = y_cnt - p.R * 0.6; % Testo sotto la lamiera
+                        va = 'bottom';
                     else
                         % Rullo Pari (Superiore): la lamiera preme sotto
                         x_cnt = cx + R_eff_plot * sin(angle_rad);
                         y_cnt = cy - R_eff_plot * cos(angle_rad);
-                    end
-                    
-
-                    % A. Punto Rosso (Contatto sulla lamiera)
-                    plot(ax, x_cnt, y_cnt, 'ro', 'MarkerFaceColor', 'r', 'MarkerSize', 4);
-
-                    % B. Testo Angolo (Radianti)
-                    % Lo posizioniamo sopra o sotto in base al tipo di rullo per leggibilità
-                    offset_txt = p.R * 0.5; % Distanza dal centro
-                    if mod(i,2) ~= 0
-                        % Rullo Dispari (Inferiore) -> Scrivi sopra la lamiera
-                        txt_y = y_cnt + offset_txt;
-                        va = 'bottom';
-                    else
-                        % Rullo Pari (Superiore) -> Scrivi sotto la lamiera
-                        txt_y = y_cnt - offset_txt;
+                        txt_y = y_cnt + p.R * 0.6; % Testo sopra la lamiera
                         va = 'top';
                     end
 
-                    text(ax, x_cnt, txt_y, sprintf('%.4f rad', angle_rad), ...
+                    % A. Punto Rosso (Contatto sulla lamiera)
+                    plot(ax, x_cnt, y_cnt, 'ro', 'MarkerFaceColor', 'r', 'MarkerSize', 5);
+
+                    % B. Testo Angolo (Gradi)
+                    text(ax, cx, txt_y, sprintf('%.2f°', angle_deg), ...
                         'HorizontalAlignment', 'center', 'Color', 'r', ...
-                        'FontSize', 8, 'VerticalAlignment', va, 'FontWeight', 'bold');
+                        'FontSize', 9, 'VerticalAlignment', va, 'FontWeight', 'bold');
                 end
             end
 
@@ -756,10 +742,10 @@ classdef LevelerApp < matlab.apps.AppBase
             if ~isempty(x_plot)
                 xlim(ax, [min(x_plot)-p.P, max(x_plot)+p.P]);
                 % Auto-scale Y per vedere bene la deformazione (centrata sullo spessore)
-                ylim(ax, [-p.R*1.5, p.R*1.5]); % Zoom sui rulli
+                ylim(ax, [-p.R*2.2, p.R*2.2]); % Zoom sui rulli
             end
 
-            ax.Title.String = 'Machine geometry and Elastic line';
+            ax.Title.String = 'Elastic line';
             xlabel(ax, 'Length [mm]'); ylabel(ax, 'Hight [mm]');
 
 
@@ -990,60 +976,70 @@ classdef LevelerApp < matlab.apps.AppBase
 
 
         function show3DSurface(app)
-            % 1. Verifica che i dati siano presenti (selezionati sulla mappa)
             if isempty(app.CurrentDetailData) || isempty(app.CurrentSheetData)
-                uialert(app.UIFigure, 'Seleziona prima un punto sulla mappa (fai click)!', 'Dati Mancanti');
+                uialert(app.UIFigure, 'Seleziona prima un punto sulla mappa!', 'Dati Mancanti');
                 return;
             end
 
-            D = app.CurrentDetailData; % Risultato della simulazione (Kernel)
-            S = app.CurrentSheetData;   % Specifiche del materiale
-            
-            % 2. Setup Finestra di Visualizzazione
+            D = app.CurrentDetailData; 
+            S = app.CurrentSheetData;  
+
             fig_tag = 'Result3DWindow';
             f = findobj('Type', 'figure', 'Tag', fig_tag);
             if isempty(f), f = uifigure('Name', 'Final Leveled Sheet Geometry', 'Tag', fig_tag, 'Color', 'w'); end
             figure(f); clf(f);
             ax = uiaxes(f);
 
-            % 3. Generazione Geometria Finale (Post-Spianatura)
-            % Creiamo un foglio di 2 metri (2000mm) per visualizzare la curvatura residua
-            L_plot = 2000;
+            L_plot = 2000; 
             W = S.Geo.W;
             [X, Y] = meshgrid(linspace(0, L_plot, 50), linspace(-W/2, W/2, 30));
 
-            % Curvatura residua dal Kernel [1/mm]
-            k_res = D.Curvature; 
+            if isfield(D, 'Curvature')
+                k_res = D.Curvature; 
+            else
+                k_res = 0; 
+            end
 
-            % Calcolo Z (Forma cilindrica/parabolica finale basata sulla fisica del molleggio)
-            % Z = 1/2 * K * X^2
-            Z = 0.5 * k_res * X.^2;
+            Z = 0.5 * k_res * (X.^2);
 
-            % 4. Rappresentazione Stress Residuo
-            % Usiamo lo stress residuo superficiale (MPa) per la colorazione della pelle
-            % Poiché è una singola striscia, lo stress è costante su tutta la faccia
-            sig_surf = D.Residual_Stress_Surface;
+            if isfield(D, 'Residual_Stress_Surface')
+                sig_surf = D.Residual_Stress_Surface;
+            else
+                sig_surf = 0;
+            end
+            
             C = ones(size(Z)) * sig_surf;
 
-            % Rendering della superficie
             surf(ax, X, Y, Z, C, 'FaceColor', 'interp', 'EdgeColor', 'none');
 
-            % 5. Estetica e Annotazioni Tecniche
-            axis(ax, 'equal'); view(ax, [-45 30]);
+            axis(ax, 'equal'); 
+            view(ax, [-45 30]);
             colormap(ax, 'jet'); 
             cb = colorbar(ax); cb.Label.String = 'Surface Residual Stress [MPa]';
             
-            title(ax, sprintf('Final Leveled Sheet | K_{res}: %.3f 1/m', k_res * 1000));
+            % SINCRONIZZAZIONE SCALA COLORI CON LA MAPPA PRINCIPALE
+            if ~isempty(app.GridResults) && isfield(app.GridResults, 'S')
+                min_S = min(app.GridResults.S(:));
+                max_S = max(app.GridResults.S(:));
+                if max_S > min_S
+                    clim(ax, [min_S, max_S]);
+                else
+                    clim(ax, [min_S-5, max_S+5]); % Fallback se la mappa è tutta piatta
+                end
+            else
+                limit_val = max(abs(sig_surf), 5);
+                clim(ax, [-limit_val, limit_val]);
+            end
+            
+            title(ax, sprintf('Final Leveled Sheet | K_{res}: %.3f [1/m] | \\sigma_{res}: %.1f [MPa]', k_res * 1000, sig_surf));
             xlabel(ax, 'Length [mm]'); ylabel(ax, 'Width [mm]'); zlabel(ax, 'Z [mm]');
             grid(ax, 'on');
 
-            % Alert Visivo in caso di Rottura del Materiale (Failure check)
-            if isfield(D, 'Max_Total_Stress') && D.Max_Total_Stress > S.Mat.Rm
-                text(ax, L_plot/2, 0, max(Z(:))*1.2, 'MATERIAL FAILURE!', ...
+            if isfield(D, 'Max_Total_Stress') && isfield(S.Mat, 'Rm') && D.Max_Total_Stress > S.Mat.Rm
+                text(ax, L_plot/2, 0, max(Z(:)) + 10, 'MATERIAL FAILURE!', ...
                     'Color', 'r', 'FontSize', 22, 'FontWeight', 'bold', 'HorizontalAlignment', 'center');
             end
         end
-        
         % --- POPUP: STRESS RESIDUO + SOTTO CARICO (SENZA LEGENDA) ---
         function openStressWindow(app)
             if isempty(app.CurrentDetailData), return; end
@@ -1909,7 +1905,7 @@ classdef LevelerApp < matlab.apps.AppBase
             % --- 3. Area Grafici (Layout Avanzato) ---
             % Griglia principale Dashboard: 2 Righe (Sinistra) x 2 Colonne
             app.DashboardGrid = uigridlayout(app.GridLayoutMain, [1, 2]);
-            app.DashboardGrid.ColumnWidth = {'1.5x', '1x'};
+            app.DashboardGrid.ColumnWidth = {'1.2x', '1x'};
 
             % Sottogriglia Sinistra (3 Grafici a cascata)
             LeftGrid = uigridlayout(app.DashboardGrid, [3, 1]);
