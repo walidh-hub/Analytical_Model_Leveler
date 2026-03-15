@@ -170,8 +170,8 @@ classdef SheetSpecApp < matlab.apps.AppBase
             p1 = app.Edit_Par1.Value; p2 = app.Edit_Par2.Value; H_kin = app.Edit_Hkin.Value; 
 
             % Percorso di carico: Trazione -> Scarico -> Compressione
-            steps_load = linspace(0, 0.015, 100);
-            steps_unload = linspace(0.015, -0.015, 200); % Allunghiamo il ritorno per vedere bene Bauschinger
+            steps_load = linspace(0, 0.025, 100);
+            steps_unload = linspace(0.025, -0.025, 200); % Allunghiamo il ritorno per vedere bene Bauschinger
             strain_path = [steps_load, steps_unload];
             
             % Array Storia
@@ -223,10 +223,10 @@ classdef SheetSpecApp < matlab.apps.AppBase
                 radius_hist(i) = Current_Yield_Radius;
             end
             
-            % --- PLOTTING MIGLIORATO ---
-            hold(app.Ax_Mat, 'off'); % Forza reset dello stato hold
-            cla(app.Ax_Mat, 'reset');         % Pulisce completamente l'asse
-            hold(app.Ax_Mat, 'on');  % Riattiva hold per i nuovi grafici sovrapposti
+            % --- PLOTTING ---
+            hold(app.Ax_Mat, 'off');  % Forza reset dello stato hold
+            cla(app.Ax_Mat, 'reset'); % Pulisce completamente l'asse
+            hold(app.Ax_Mat, 'on');   % Riattiva hold per i nuovi grafici sovrapposti
             
             % 1. Fascia Elastica (Area ammissibile corrente)
             % Disegniamo i limiti istantanei
@@ -242,7 +242,7 @@ classdef SheetSpecApp < matlab.apps.AppBase
             % 3. Stress Reale
             plot(app.Ax_Mat, strain_path*100, sigma_hist, 'b-', 'LineWidth', 2, 'DisplayName', 'Stress (\sigma)');
             
-            app.Ax_Mat.Title.String = 'Isotropic + Kinematic Hardening'; 
+            app.Ax_Mat.Title.String = 'Flow rule'; 
             xlabel(app.Ax_Mat, 'Strain [%]'); ylabel(app.Ax_Mat, 'Stress [MPa]');
             grid(app.Ax_Mat, 'on'); legend(app.Ax_Mat, 'Location', 'best');
         end
@@ -294,8 +294,20 @@ classdef SheetSpecApp < matlab.apps.AppBase
             % 4. Superficie Totale
             Z_tot = Z_Coil + Z_Wave;
 
-            % 5. Rendering (Colorazione basata sull'ampiezza dell'onda per contrasto)
-            surf(app.Ax_3D, X, Y, Z_tot, Z_Wave, 'EdgeColor', 'none', 'FaceColor', 'interp');
+            % 5. Rendering con Spessore Reale (per visualizzazione view [0,0])
+            t = app.Edit_t.Value;
+            cla(app.Ax_3D); hold(app.Ax_3D, 'on');
+
+            % 6. Top (Estradosso) e Bottom (Intradosso) offsettati di t/2
+            surf(app.Ax_3D, X, Y, Z_tot + t/2, Z_Wave, 'EdgeColor', 'none', 'FaceColor', 'interp');
+            surf(app.Ax_3D, X, Y, Z_tot - t/2, Z_Wave, 'EdgeColor', 'none', 'FaceColor', 'interp', 'FaceAlpha', 0.5);
+            % Chiusura bordi laterali (per vedere lo spessore dal lato)
+            surf(app.Ax_3D, [X(1,:); X(1,:)], [Y(1,:); Y(1,:)], [Z_tot(1,:)-t/2; Z_tot(1,:)+t/2], 'FaceColor', 'k', 'FaceAlpha', 0.1, 'EdgeColor', 'none');
+            surf(app.Ax_3D, [X(end,:); X(end,:)], [Y(end,:); Y(end,:)], [Z_tot(end,:)-t/2; Z_tot(end,:)+t/2], 'FaceColor', 'k', 'FaceAlpha', 0.1, 'EdgeColor', 'none');
+
+
+            % % 6. Rendering of infinitesimal sheet thickness (Colorazione basata sull'ampiezza dell'onda per contrasto)
+            % surf(app.Ax_3D, X, Y, Z_tot, Z_Wave, 'EdgeColor', 'none', 'FaceColor', 'interp');
 
             % Setup Estetico
             axis(app.Ax_3D, 'equal'); axis(app.Ax_3D, 'tight'); view(app.Ax_3D, [-45 30]);
@@ -403,8 +415,19 @@ classdef SheetSpecApp < matlab.apps.AppBase
             app.Lbl_Par2=uilabel(gl_m,'Text','-'); app.Edit_Par2=uieditfield(gl_m,'numeric','Value',0,'ValueChangedFcn',@(s,e)app.updatePlots());
             app.Lbl_Hkin=uilabel(gl_m,'Text','H_kin:'); app.Edit_Hkin=uieditfield(gl_m,'numeric','Value',2000,'ValueChangedFcn',@(s,e)app.updatePlots());
 
+            % --- QUADRANT (2,1): LONGITUDINAL PANEL ---
+            app.Pnl_Long = uipanel(app.GridControls, 'Title', '2. Longitudinal Defects (Coil Set)');
+            app.Pnl_Long.Layout.Row = 2; 
+            app.Pnl_Long.Layout.Column = 1;
+            
+            gl_l = uigridlayout(app.Pnl_Long, [2, 1]); 
+            gl_l.RowHeight = {'1x', '1x'};
+            
+            app.createSmartSlider(gl_l, 1, 'Longitudinal Curvature K0 [1/m]', -5, 5, -0.2, 'K0');
+            app.createSmartSlider(gl_l, 2, 'Surface Residual Stress [MPa]', -300, 300, -100, 'SigL');
+
             % --- QUADRANT (1,2): TRANSVERSE PANEL & WAVE TYPE ---
-            app.Pnl_Trans = uipanel(app.GridControls, 'Title', '2. Transverse Defects (Crossbow & Waves)');
+            app.Pnl_Trans = uipanel(app.GridControls, 'Title', '3. Transverse Defects (Crossbow & Waves)');
             app.Pnl_Trans.Layout.Row = 1; 
             app.Pnl_Trans.Layout.Column = 2;
             
@@ -421,16 +444,6 @@ classdef SheetSpecApp < matlab.apps.AppBase
             uilabel(subG_W, 'Text', 'Wave Pattern:');
             app.Drop_WaveType = uidropdown(subG_W, 'Items', {'Edge Waves', 'Center Buckles', 'Balanced (Mixed)'}, 'Value', 'Edge Waves', 'ValueChangedFcn', @(s,e) app.updatePlots());
 
-            % --- QUADRANT (2,1): LONGITUDINAL PANEL ---
-            app.Pnl_Long = uipanel(app.GridControls, 'Title', '3. Longitudinal Defects (Coil Set)');
-            app.Pnl_Long.Layout.Row = 2; 
-            app.Pnl_Long.Layout.Column = 1;
-            
-            gl_l = uigridlayout(app.Pnl_Long, [2, 1]); 
-            gl_l.RowHeight = {'1x', '1x'};
-            
-            app.createSmartSlider(gl_l, 1, 'Longitudinal Curvature K0 [1000/m]', -5, 5, -0.2, 'K0');
-            app.createSmartSlider(gl_l, 2, 'Surface Residual Stress [MPa]', -300, 300, -100, 'SigL');
 
             % --- QUADRANT (2,2): SAVE ACTION ---
             BtnGrid = uigridlayout(app.GridControls, [3, 1]);
@@ -473,6 +486,7 @@ classdef SheetSpecApp < matlab.apps.AppBase
             app.Ax_3D = uiaxes(app.GridGraphs);
             app.Ax_3D.Layout.Row = 2; app.Ax_3D.Layout.Column = [1 3];
             app.Ax_3D.Title.String = '3D Sheet Surface Preview';
+            
 
             % Finalize
             app.onModelChange(); 

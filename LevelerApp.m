@@ -55,29 +55,28 @@ classdef LevelerApp < matlab.apps.AppBase
         function prepareAnalysis(app)
             % Controllo preliminare
             if isempty(app.CurrentSheetData)
-                uialert(app.UIFigure, 'Devi caricare un file Lamiera (.sheet) prima di calcolare!', 'Dati Mancanti');
+                uialert(app.UIFigure, 'You must updload a sheet (.sheet) to simulate!', 'Missing Data');
                 return;
             end
 
             % Crea una piccola finestra di dialogo modale
-            d = uifigure('Name', 'Impostazioni Simulazione', 'Position', [500 400 350 300]);
+            d = uifigure('Name', 'Simulation parameters', 'Position', [500 400 350 300]);
             gl = uigridlayout(d, [6, 2]);
 
-            uilabel(gl, 'Text', 'Modalità Analisi:');
+            uilabel(gl, 'Text', 'Analysis Mode:');
             modeDrop = uidropdown(gl, 'Items', {'Singola Striscia (Veloce)', 'Multi-Strip (3D)'});
 
-            uilabel(gl, 'Text', 'Discretizzazione Larghezza:');
+            uilabel(gl, 'Text', 'Width disctetization:');
             stripEdit = uieditfield(gl, 'numeric', 'Value', 11);
 
-            uilabel(gl, 'Text', 'Punti Griglia (Mappa):');
+            uilabel(gl, 'Text', 'Grid points:');
             gridEdit = uieditfield(gl, 'numeric', 'Value', 5);
 
-            uilabel(gl, 'Text', 'Iterazioni Fitter:');
-            fitEdit = uieditfield(gl, 'numeric', 'Value', 5);
+            uilabel(gl, 'Text', 'Fitter iteractions:');
+            fitEdit = uieditfield(gl, 'numeric', 'Value', 2);
 
-            % --- CORREZIONE QUI ---
             % Creiamo prima il bottone, poi assegniamo il layout
-            btnStart = uibutton(gl, 'Text', 'AVVIA CALCOLO', ...
+            btnStart = uibutton(gl, 'Text', 'Go to Simulation', ...
                 'ButtonPushedFcn', @(s,e) start(app, d, modeDrop.Value, stripEdit.Value, gridEdit.Value, fitEdit.Value));
 
             % Posizionamento nella griglia (Riga 6, esteso su entrambe le colonne)
@@ -91,229 +90,466 @@ classdef LevelerApp < matlab.apps.AppBase
             end
         end
 
+        % function runAnalysis(app, mode, nStrips, nGrid, nFit)
+        %     % 1. Input Base
+        %     base.N = app.Edit_N.Value; base.P = app.Edit_P.Value; base.R = app.Edit_R.Value;
+        %     base.I_in = app.Edit_I_in.Value; base.I_out = app.Edit_I_out.Value;
+        %     base.Fc = app.Edit_Fc.Value; base.Fl = app.Edit_Fl.Value;
+        % 
+        %     % 2. Recupera Dati Lamiera (da Struttura Caricata)
+        %     S = app.CurrentSheetData;
+        %     base.t = S.Geo.t;
+        %     base.W = S.Geo.W;
+        %     base.E = S.Mat.E;
+        %     base.Sy = S.Mat.Sy;
+        %     base.sig0 = base.Sy;
+        %     base.H_kin = S.Mat.H_kin;
+        %     base.K0 = S.Defects.K0_Geo;
+        %     base.K_crossbow = S.Defects.K_Trans_Geo; % Idem [1/m]
+        %     base.H_mm = S.Defects.H_mm;
+        %     base.L_mm = S.Defects.L_mm;
+        %     base.Initial_Eps_Pl = S.State.Eps_Pl_Final;
+        %     base.Initial_Sigma = S.State.Sigma_Res;
+        % 
+        %     if isfield(S.Defects, 'WaveType')
+        %         base.WaveType = S.Defects.WaveType;
+        %     else
+        %         base.WaveType = 'Edge Waves';
+        %     end
+        % 
+        %     % Rm check (Se non presente, stima safe)
+        %     if isfield(S.Mat, 'Rm'), base.Rm = S.Mat.Rm; else, base.Rm = base.Sy * 1.5; end
+        % 
+        %     % Gestione Memoria Plastica (Multi-Pass)
+        %     if isfield(S, 'State') && isfield(S.State, 'Alpha_Final')
+        %         base.Initial_Alpha = S.State.Alpha_Final;
+        %         disp('Simulazione Multi-Pass: Caricata memoria plastica (Backstress).');
+        %     end
+        % 
+        %     % Gestione Modello Materiale
+        %     modMap = containers.Map({'Linear','Ludwik','Voce'}, {1, 2, 3});
+        %     if isKey(modMap, S.Mat.Model)
+        %         base.ModelType = modMap(S.Mat.Model);
+        %     else
+        %         base.ModelType = 1; % Fallback
+        %     end
+        % 
+        %     % Parametri specifici (Mapping generico P1/P2)
+        %     if base.ModelType == 1, base.H_iso = S.Mat.P1;
+        %     elseif base.ModelType == 2, base.K_hol = S.Mat.P1; base.n_hol = S.Mat.P2;
+        %     elseif base.ModelType == 3, base.S_sat = S.Mat.P1; base.b_voce = S.Mat.P2;
+        %     end
+        % 
+        %     % Nota: base.WaveAmp è ridondante se il Kernel usa H e L, % ma lo lasciamo per compatibilità se serve visualizzarlo
+        %     % WaveAmp (Strain) serve al Kernel per fallback o calcoli rapidi?  % Lo ricalcoliamo coerentemente da H e L per non avere discrepanze.
+        %     % Calcolo I-Units per Kernel
+        %     if base.L_mm > 0
+        %         base.WaveAmp = (base.H_mm / base.L_mm)^2 * 246760;
+        %     else
+        %         base.WaveAmp = 0;
+        %     end
+        % 
+        % 
+        %     % 2. Setup Griglia
+        %     field_x = app.VarMap{strcmp(app.VarMap(:,1), app.Drop_AxisX.Value), 2};
+        %     field_y = app.VarMap{strcmp(app.VarMap(:,1), app.Drop_AxisY.Value), 2};
+        %     range_x = linspace(app.Edit_MinX.Value, app.Edit_MaxX.Value, nGrid);
+        %     range_y = linspace(app.Edit_MinY.Value, app.Edit_MaxY.Value, nGrid);
+        % 
+        %     [GRID_X, GRID_Y] = meshgrid(range_x, range_y);
+        %     app.GridResults = struct();
+        %     app.GridResults.FlatnessError = zeros(size(GRID_X));
+        %     RES_STRESS = zeros(size(GRID_X)); RES_CURV = zeros(size(GRID_X)); RES_XBOW = zeros(size(GRID_X));
+        %     FAIL_MASK = false(size(GRID_X));
+        % 
+        % 
+        %     % Vecchio codice prima di integrazione bucling e edgewave
+        %     % y_norm_sq = (2 * y_strips / base.W).^2;
+        %     % if strcmpi(base.WaveType, 'Edge Waves')
+        %     %     profile_y = y_norm_sq;         % Difetto massimo ai bordi
+        %     % elseif strcmpi(base.WaveType, 'Center Buckles')
+        %     %     profile_y = (1 - y_norm_sq);   % Difetto massimo al centro
+        %     % else
+        %     %     profile_y = (y_norm_sq - 0.5); % Bilanciato
+        %     % end
+        % 
+        %     % Parametri Analisi
+        %     %is3D = strcmp(mode, 'Multi-Strip (3D)');
+        %     %y_strips = linspace(-base.W/2, base.W/2, nStrips);
+        % 
+        %     d = uiprogressdlg(app.UIFigure, 'Title', 'Simulation Log...', 'Message', '--- Inizio Sessione ---', 'Cancelable', 'off');
+        % 
+        %     try
+        %         isFastMode = strcmp(mode, 'Singola Striscia (Veloce)');
+        % 
+        %         if isFastMode
+        %             % In modalità veloce, calcoliamo solo il punto centrale della griglia
+        %             mid_idx = ceil(numel(GRID_X)/2);
+        %             loop_indices = mid_idx;
+        %             d.Message = 'Modalità Veloce: Calcolo punto singolo...';
+        %             d.Indeterminate = 'on'; 
+        %         else
+        %             % In modalità 3D, calcoliamo tutta la mappa (100 punti)
+        %             loop_indices = 1:numel(GRID_X);
+        %             d.Message = 'Generazione Mappa Completa...';
+        %             d.Indeterminate = 'off';
+        %         end
+        % 
+        % 
+        %         total = numel(GRID_X);
+        % 
+        %         OptsMap.nStrips = 5; % Bastano 5 strisce per stimare la tendenza sulla mappa
+        %         OptsMap.GridX = []; OptsMap.GridY = []; % Non serve interpolazione qui
+        % 
+        %         for k = 1:total
+        %             if mod(k,5)==0, d.Value = k/(total*1.2); end
+        % 
+        %             % Aggiorna parametri macchina per questo punto della griglia
+        %             p_curr = base;
+        %             p_curr = app.updatePStruct(p_curr, field_x, GRID_X(k));
+        %             p_curr = app.updatePStruct(p_curr, field_y, GRID_Y(k));
+        % 
+        % 
+        % 
+        %             % --- CALCOLO MULTI-STRISCIA LOCALE (Sostituisce Solver_3D) ---
+        %             n_test = 5; % Numero di strisce per la mappa (veloce)
+        %             y_test = linspace(-p_curr.W/2, p_curr.W/2, n_test);
+        %             elongations = zeros(1, n_test);
+        %             curvatures = zeros(1, n_test);
+        % 
+        %             for s = 1:n_test
+        %                 ps = p_curr;
+        %                 % Calcolo K0 locale (Coil Set + Contributo Onde)
+        %                 y_norm = (2 * y_test(s) / ps.W)^2;
+        %                 if strcmpi(ps.WaveType, 'Center Buckles'), prof = 1 - y_norm;
+        %                 elseif strcmpi(ps.WaveType, 'Balanced'), prof = abs(y_norm - 0.5);
+        %                 else, prof = y_norm; end
+        % 
+        %                 % K_wave [1/mm] derivata dalla planarità di input
+        %                 K_wave = (ps.WaveAmp / 246760) * prof; 
+        %                 ps.K0 = base.K0 + K_wave;
+        %                 ps.y_coord = y_test(s);
+        % 
+        %                 [M, ~] = Leveler_Kernel_CIM(ps);
+        %                 elongations(s) = M.Avg_Elongation_Pct;
+        %                 curvatures(s) = M.Curvature;
+        %             end
+        % 
+        %             % Calcolo Scalari per la Mappa
+        %             app.GridResults.FlatnessError(k) = (max(elongations) - min(elongations)) * 1000; % I-Units
+        %             app.GridResults.S(k) = M.Residual_Stress_Surface;
+        %             app.GridResults.C(k) = mean(curvatures);
+        %         end
+        % 
+        %             % Salvataggio Risultati Scalari nelle Matrici della Mappa
+        %             app.GridResults.FlatnessError(k) = Res.Scalar.Flatness;
+        %             RES_STRESS(k) = Res.Scalar.Stress;
+        %             RES_CURV(k)   = Res.Scalar.Curv;
+        %             RES_XBOW(k)   = Res.Scalar.Crossbow;
+        %             FAIL_MASK(k)  = Res.Scalar.Fail;
+        % 
+        %             % Salvataggio Risultati
+        %             app.GridResults.X = GRID_X; app.GridResults.Y = GRID_Y;
+        %             app.GridResults.S = RES_STRESS; app.GridResults.C = RES_CURV; app.GridResults.XB = RES_XBOW;
+        %             app.GridResults.Fail = FAIL_MASK;
+        %             app.GridResults.Base = base; app.GridResults.FieldX = field_x; app.GridResults.FieldY = field_y;
+        % 
+        %             % --- OTTIMIZZAZIONE (Fitter) ---
+        %             target_mode = app.Drop_OptMode.Value;
+        % 
+        %             % Selezione Mappa Obiettivo (per trovare il punto di partenza)
+        %             if strcmp(target_mode, 'RES STRESS')
+        %                 TARGET_MAP = RES_STRESS;
+        %             elseif strcmp(target_mode, 'Curvature')
+        %                 TARGET_MAP = abs(RES_CURV);
+        %             elseif strcmp(target_mode, 'Flatness (I-Units)')
+        %                 TARGET_MAP = app.GridResults.FlatnessError;
+        %             else
+        %                 % Caso Crossbow
+        %                 TARGET_MAP = abs(app.GridResults.XB);
+        %             end
+        % 
+        %             [current_min, idx] = min(TARGET_MAP(:));
+        %             best_x = GRID_X(idx); best_y = GRID_Y(idx);
+        % 
+        %             d.Message = ['Ottimizzazione (' target_mode ')...'];
+        %             msg = sprintf('Calcolo punto mappa %d di %d...', k, total);
+        %             d.Message = sprintf('%s\n%s', d.Message, msg); % Accumula nel log
+        %             FIT_X = zeros(nFit, 1);
+        %             FIT_Y = zeros(nFit, 1);
+        %             step_x = (max(range_x)-min(range_x))/10; step_y = (max(range_y)-min(range_y))/10;
+        % 
+        %             for iter = 1:nFit
+        % 
+        %                 msg = sprintf('[%s] Punto %d/%d - Iterazione %d/%d...', target_mode, k, total, iter, nFit);
+        %                 d.Message = sprintf('%s\n%s', d.Message, msg); % Accumula nel log
+        % 
+        %                 found_better = false;
+        %                 % Definiamo i vicini (aggiungiamo Fc e Fl se necessario)
+        %                 nb = [best_x+step_x, best_y; best_x-step_x, best_y; best_x, best_y+step_y; best_x, best_y-step_y];
+        % 
+        %                 for n = 1:4
+        %                     cx = nb(n,1); cy = nb(n,2);
+        %                     if cx<min(range_x)||cx>max(range_x)||cy<min(range_y)||cy>max(range_y), continue; end
+        % 
+        %                     p = base; p = app.updatePStruct(p, field_x, cx); p = app.updatePStruct(p, field_y, cy);
+        % 
+        %                     % Setup rapido per il Fitter
+        %                     OptsFit.nStrips = 3; % Bastano 3 strisce (Centro/Bordi) per capire la direzione
+        %                     OptsFit.GridX = []; OptsFit.GridY = [];
+        % 
+        %                     ResFit = Leveler_Solver_3D(S, p, OptsFit);
+        % 
+        %                     % Selezione Obiettivo da Minimizzare
+        %                     if strcmp(target_mode, 'Flatness (I-Units)')
+        %                         val = ResFit.Scalar.Flatness;
+        %                     elseif strcmp(target_mode, 'RES STRESS')
+        %                         val = abs(ResFit.Scalar.Stress);
+        %                     elseif strcmp(target_mode, 'Curvature')
+        %                         val = abs(ResFit.Scalar.Curv);
+        %                     else % Crossbow
+        %                         val = abs(ResFit.Scalar.Crossbow);
+        %                     end
+        % 
+        %                     if val < current_min
+        %                         current_min = val; best_x = cx; best_y = cy; found_better = true;
+        %                     end
+        %                 end
+        % 
+        %                 % Assegnazione diretta (Veloce)
+        %                 FIT_X(iter) = best_x;
+        %                 FIT_Y(iter) = best_y;
+        % 
+        %                 if ~found_better
+        %                     step_x = step_x / 2;
+        %                     step_y = step_y / 2;
+        %                 end
+        %                 if iter > 2 && step_x < 1e-4, break; end
+        %             end
+        % 
+        %             app.GridResults.FitPathX = FIT_X; app.GridResults.FitPathY = FIT_Y;
+        %         end
+        %     catch ME
+        %         %close(d);
+        %         uialert(app.UIFigure, ME.message, 'Errore'); return;
+        %     end
+        %     %close(d);
+        %     d.Message = sprintf('%s\n\n>>> CALCOLO TERMINATO', d.Message);
+        %     d.Value = 1;
+        % 
+        %     app.updateDetailPlots(best_x, best_y, true);
+        %     app.Btn_ShowMat.Enable = 'on'; app.Btn_ShowStress.Enable = 'on';
+        %     app.Btn_ShowHysteresis.Enable = 'on'; app.Btn_Show3D.Enable = 'on'; app.Btn_Save.Enable = 'on';
+        % end
+
+
+
         function runAnalysis(app, mode, nStrips, nGrid, nFit)
-            % 1. Input Base
-            base.N = app.Edit_N.Value; base.P = app.Edit_P.Value; base.R = app.Edit_R.Value;
-            base.I_in = app.Edit_I_in.Value; base.I_out = app.Edit_I_out.Value;
-            base.Fc = app.Edit_Fc.Value; base.Fl = app.Edit_Fl.Value;
+            % --- FASE 1: DATA EXTRACTION & MATERIAL MAPPING ---
+            
+            % 1. Parametri Macchina (da UI)
+            base.N    = round(app.Edit_N.Value);
+            base.P    = app.Edit_P.Value;
+            base.R    = app.Edit_R.Value;
+            base.I_in = app.Edit_I_in.Value;
+            base.I_out = app.Edit_I_out.Value;
+            base.Fc   = app.Edit_Fc.Value;
+            base.Fl   = app.Edit_Fl.Value;
 
-            % 2. Recupera Dati Lamiera (da Struttura Caricata)
+            % 2. Dati Lamiera (dal file .sheet caricato)
             S = app.CurrentSheetData;
-            base.t = S.Geo.t;
-            base.W = S.Geo.W;
-            base.E = S.Mat.E;
-            base.Sy = S.Mat.Sy;
-            base.sig0 = base.Sy;
-            base.H_kin = S.Mat.H_kin;
-            base.K0 = S.Defects.K0_Geo;
-            base.K_crossbow = S.Defects.K_Trans_Geo; % Idem [1/m]
-            base.H_mm = S.Defects.H_mm;
-            base.L_mm = S.Defects.L_mm;
-            base.Initial_Eps_Pl = S.State.Eps_Pl_Final;
-            base.Initial_Sigma = S.State.Sigma_Res;
+            base.t      = S.Geo.t;
+            base.W      = S.Geo.W;
+            base.E      = S.Mat.E;
+            base.Sy     = S.Mat.Sy;
+            base.sig0   = base.Sy; % Alias per il raggio iniziale del Kernel
+            base.H_kin  = S.Mat.H_kin;
+            base.Rm     = S.Mat.Rm;
 
-            if isfield(S.Defects, 'WaveType')
-                base.WaveType = S.Defects.WaveType;
-            else
-                base.WaveType = 'Edge Waves';
-            end
-
-            % Rm check (Se non presente, stima safe)
-            if isfield(S.Mat, 'Rm'), base.Rm = S.Mat.Rm; else, base.Rm = base.Sy * 1.5; end
-
-            % Gestione Memoria Plastica (Multi-Pass)
-            if isfield(S, 'State') && isfield(S.State, 'Alpha_Final')
-                base.Initial_Alpha = S.State.Alpha_Final;
-                disp('Simulazione Multi-Pass: Caricata memoria plastica (Backstress).');
-            end
-
-            % Gestione Modello Materiale
+            % 3. Mappatura Modello di Incrudimento
+            % Convertiamo il nome del modello in ID numerico per il Kernel (1, 2, 3)
             modMap = containers.Map({'Linear','Ludwik','Voce'}, {1, 2, 3});
             if isKey(modMap, S.Mat.Model)
                 base.ModelType = modMap(S.Mat.Model);
             else
-                base.ModelType = 1; % Fallback
+                base.ModelType = 1; % Fallback cautelativo
             end
 
-            % Parametri specifici (Mapping generico P1/P2)
-            if base.ModelType == 1, base.H_iso = S.Mat.P1;
-            elseif base.ModelType == 2, base.K_hol = S.Mat.P1; base.n_hol = S.Mat.P2;
-            elseif base.ModelType == 3, base.S_sat = S.Mat.P1; base.b_voce = S.Mat.P2;
+            % Assegnazione parametri P1/P2 in base al modello
+            if base.ModelType == 1
+                base.H_iso = S.Mat.P1; % Lineare
+            elseif base.ModelType == 2
+                base.K_hol = S.Mat.P1; base.n_hol = S.Mat.P2; % Ludwik
+            elseif base.ModelType == 3
+                base.S_sat = S.Mat.P1; base.b_voce = S.Mat.P2; % Voce
             end
 
-            % Nota: base.WaveAmp è ridondante se il Kernel usa H e L, % ma lo lasciamo per compatibilità se serve visualizzarlo
-            % WaveAmp (Strain) serve al Kernel per fallback o calcoli rapidi?  % Lo ricalcoliamo coerentemente da H e L per non avere discrepanze.
-            % Calcolo I-Units per Kernel
-            if base.L_mm > 0
-                base.WaveAmp = (base.H_mm / base.L_mm)^2 * 246760;
-            else
-                base.WaveAmp = 0;
-            end
+            % 4. Configurazione Difetti di Input
+            base.K0 = S.Defects.K0_Geo;
+            if isfield(S.Defects, 'WaveType'), base.WaveType = S.Defects.WaveType;
+            else, base.WaveType = 'Edge Waves'; end % Default
+
+            % 5. Memoria Plastica (Supporto Multi-Pass)
+            % Se il file .sheet contiene stati finali, li usiamo come punto di partenza
+            base.Initial_Alpha  = S.State.Alpha_Final; % Backstress
+            base.Initial_Sigma  = S.State.Sigma_Res;   % Stress residuo
+            base.Initial_Eps_Pl = S.State.Eps_Pl_Final; % Deformazione plastica cumulata
 
 
-            % 2. Setup Griglia
+            % --- FASE 2: SENSITIVITY GRID SETUP ---
+
+            % 1. Identificazione dei campi da variare (Mappatura tramite VarMap)
+            % Determiniamo i nomi interni dei campi (es. 'I_in', 'Fc') basandoci sulla scelta nei dropdown
             field_x = app.VarMap{strcmp(app.VarMap(:,1), app.Drop_AxisX.Value), 2};
             field_y = app.VarMap{strcmp(app.VarMap(:,1), app.Drop_AxisY.Value), 2};
+
+            % 2. Generazione dei Range Lineari
             range_x = linspace(app.Edit_MinX.Value, app.Edit_MaxX.Value, nGrid);
             range_y = linspace(app.Edit_MinY.Value, app.Edit_MaxY.Value, nGrid);
 
+            % 3. Creazione della Griglia 2D (Meshgrid)
             [GRID_X, GRID_Y] = meshgrid(range_x, range_y);
+
+            % 4. Inizializzazione della Struttura GridResults
             app.GridResults = struct();
-            app.GridResults.FlatnessError = zeros(size(GRID_X));
-            RES_STRESS = zeros(size(GRID_X)); RES_CURV = zeros(size(GRID_X)); RES_XBOW = zeros(size(GRID_X));
-            FAIL_MASK = false(size(GRID_X));
+            app.GridResults.X = GRID_X;
+            app.GridResults.Y = GRID_Y;
+            app.GridResults.FieldX = field_x;
+            app.GridResults.FieldY = field_y;
+            app.GridResults.Base = base; % Salviamo lo stato iniziale per i plot di dettaglio
 
+            % 5. Preallocazione Matrici per Performance
+            % Inizializziamo a zero o falso per evitare errori di dimensione durante il loop
+            app.GridResults.FlatnessError = zeros(size(GRID_X)); % Errore di planarità
+            app.GridResults.S    = zeros(size(GRID_X));          % Stress Residuo
+            app.GridResults.C    = zeros(size(GRID_X));          % Curvatura Residua
+            app.GridResults.Fail = false(size(GRID_X));          % Maschera di Rottura
 
-            % Vecchio codice prima di integrazione bucling e edgewave
-            % y_norm_sq = (2 * y_strips / base.W).^2;
-            % if strcmpi(base.WaveType, 'Edge Waves')
-            %     profile_y = y_norm_sq;         % Difetto massimo ai bordi
-            % elseif strcmpi(base.WaveType, 'Center Buckles')
-            %     profile_y = (1 - y_norm_sq);   % Difetto massimo al centro
-            % else
-            %     profile_y = (y_norm_sq - 0.5); % Bilanciato
-            % end
+            % Setup Barra di Progresso
+            d = uiprogressdlg(app.UIFigure, 'Title', 'Simulation Log...', ...
+                'Message', 'Generazione Mappa...', 'Indeterminate', 'off');
 
-            % Parametri Analisi
-            %is3D = strcmp(mode, 'Multi-Strip (3D)');
-            %y_strips = linspace(-base.W/2, base.W/2, nStrips);
-
-            d = uiprogressdlg(app.UIFigure, 'Title', 'Simulation Log...', 'Message', '--- Inizio Sessione ---', 'Cancelable', 'off');
-
+            % --- FASE 3: CORE SIMULATION LOOP (SINGLE STRIP) ---
+            
             try
-                isFastMode = strcmp(mode, 'Singola Striscia (Veloce)');
-                
-                if isFastMode
-                    % In modalità veloce, calcoliamo solo il punto centrale della griglia
-                    mid_idx = ceil(numel(GRID_X)/2);
-                    loop_indices = mid_idx;
-                    d.Message = 'Modalità Veloce: Calcolo punto singolo...';
-                    d.Indeterminate = 'on'; 
-                else
-                    % In modalità 3D, calcoliamo tutta la mappa (100 punti)
-                    loop_indices = 1:numel(GRID_X);
-                    d.Message = 'Generazione Mappa Completa...';
-                    d.Indeterminate = 'off';
-                end
-
-
                 total = numel(GRID_X);
-
-                OptsMap.nStrips = 5; % Bastano 5 strisce per stimare la tendenza sulla mappa
-                OptsMap.GridX = []; OptsMap.GridY = []; % Non serve interpolazione qui
+                % Struttura temporanea per raccogliere i dati grezzi del Kernel
+                % Verranno elaborati nella Fase 4 per estrarre failure e metriche
+                raw_M = cell(size(GRID_X)); 
+                raw_D = cell(size(GRID_X));
 
                 for k = 1:total
-                    if mod(k,5)==0, d.Value = k/(total*1.2); end
+                    % 1. Aggiornamento UI (Progress Bar)
+                    if mod(k, 5) == 0
+                        d.Value = k / total;
+                        d.Message = sprintf('Simulazione punto %d di %d...', k, total);
+                    end
 
-                    % Aggiorna parametri macchina per questo punto della griglia
+                    % 2. Preparazione parametri per il punto corrente
                     p_curr = base;
+                    % updatePStruct inserisce dinamicamente i valori della griglia (es. I_in, Fc, ecc.)
                     p_curr = app.updatePStruct(p_curr, field_x, GRID_X(k));
                     p_curr = app.updatePStruct(p_curr, field_y, GRID_Y(k));
                     
-                    % >>> CHIAMATA AL NUOVO MOTORE FISICO <<<
-                    % Passiamo 'S' (Lamiera), 'p_curr' (Macchina), 'OptsMap' (Setup)
-                    Res = Leveler_Solver_3D(S, p_curr, OptsMap);
+                    % 3. Configurazione "Singola Striscia"
+                    % Per ora analizziamo solo l'asse neutro/centrale della lamiera
+                    p_curr.y_coord = 0; 
 
-                    % Salvataggio Risultati Scalari nelle Matrici della Mappa
-                    app.GridResults.FlatnessError(k) = Res.Scalar.Flatness;
-                    RES_STRESS(k) = Res.Scalar.Stress;
-                    RES_CURV(k)   = Res.Scalar.Curv;
-                    RES_XBOW(k)   = Res.Scalar.Crossbow;
-                    FAIL_MASK(k)  = Res.Scalar.Fail;
+                    % 4. ESECUZIONE KERNEL CIM
+                    % Chiamata al motore fisico per risolvere la geometria e lo stress
+                    [M, D] = Leveler_Kernel_CIM(p_curr); 
 
-                    % Salvataggio Risultati
-                    app.GridResults.X = GRID_X; app.GridResults.Y = GRID_Y;
-                    app.GridResults.S = RES_STRESS; app.GridResults.C = RES_CURV; app.GridResults.XB = RES_XBOW;
-                    app.GridResults.Fail = FAIL_MASK;
-                    app.GridResults.Base = base; app.GridResults.FieldX = field_x; app.GridResults.FieldY = field_y;
-
-                    % --- OTTIMIZZAZIONE (Fitter) ---
-                    target_mode = app.Drop_OptMode.Value;
-
-                    % Selezione Mappa Obiettivo (per trovare il punto di partenza)
-                    if strcmp(target_mode, 'RES STRESS')
-                        TARGET_MAP = RES_STRESS;
-                    elseif strcmp(target_mode, 'Curvature')
-                        TARGET_MAP = abs(RES_CURV);
-                    elseif strcmp(target_mode, 'Flatness (I-Units)')
-                        TARGET_MAP = app.GridResults.FlatnessError;
-                    else
-                        % Caso Crossbow
-                        TARGET_MAP = abs(app.GridResults.XB);
-                    end
-
-                    [current_min, idx] = min(TARGET_MAP(:));
-                    best_x = GRID_X(idx); best_y = GRID_Y(idx);
-
-                    d.Message = ['Ottimizzazione (' target_mode ')...'];
-                    msg = sprintf('Calcolo punto mappa %d di %d...', k, total);
-                    d.Message = sprintf('%s\n%s', d.Message, msg); % Accumula nel log
-                    FIT_X = zeros(nFit, 1);
-                    FIT_Y = zeros(nFit, 1);
-                    step_x = (max(range_x)-min(range_x))/10; step_y = (max(range_y)-min(range_y))/10;
-
-                    for iter = 1:nFit
-
-                        msg = sprintf('[%s] Punto %d/%d - Iterazione %d/%d...', target_mode, k, total, iter, nFit);
-                        d.Message = sprintf('%s\n%s', d.Message, msg); % Accumula nel log
-
-                        found_better = false;
-                        % Definiamo i vicini (aggiungiamo Fc e Fl se necessario)
-                        nb = [best_x+step_x, best_y; best_x-step_x, best_y; best_x, best_y+step_y; best_x, best_y-step_y];
-                        
-                        for n = 1:4
-                            cx = nb(n,1); cy = nb(n,2);
-                            if cx<min(range_x)||cx>max(range_x)||cy<min(range_y)||cy>max(range_y), continue; end
-
-                            p = base; p = app.updatePStruct(p, field_x, cx); p = app.updatePStruct(p, field_y, cy);
-
-                            % Setup rapido per il Fitter
-                            OptsFit.nStrips = 3; % Bastano 3 strisce (Centro/Bordi) per capire la direzione
-                            OptsFit.GridX = []; OptsFit.GridY = [];
-                            
-                            ResFit = Leveler_Solver_3D(S, p, OptsFit);
-
-                            % Selezione Obiettivo da Minimizzare
-                            if strcmp(target_mode, 'Flatness (I-Units)')
-                                val = ResFit.Scalar.Flatness;
-                            elseif strcmp(target_mode, 'RES STRESS')
-                                val = abs(ResFit.Scalar.Stress);
-                            elseif strcmp(target_mode, 'Curvature')
-                                val = abs(ResFit.Scalar.Curv);
-                            else % Crossbow
-                                val = abs(ResFit.Scalar.Crossbow);
-                            end
-
-                            if val < current_min
-                                current_min = val; best_x = cx; best_y = cy; found_better = true;
-                            end
-                        end
-
-                        % Assegnazione diretta (Veloce)
-                        FIT_X(iter) = best_x;
-                        FIT_Y(iter) = best_y;
-
-                        if ~found_better
-                            step_x = step_x / 2;
-                            step_y = step_y / 2;
-                        end
-                        if iter > 2 && step_x < 1e-4, break; end
-                    end
-
-                    app.GridResults.FitPathX = FIT_X; app.GridResults.FitPathY = FIT_Y;
+                    % 5. Archiviazione temporanea dei risultati grezzi
+                    raw_M{k} = M;
+                    raw_D{k} = D;
                 end
-            catch ME
-                %close(d);
-                uialert(app.UIFigure, ME.message, 'Errore'); return;
+
+                % --- FASE 4: FAILURE & METRICS EXTRACTION ---
+            
+            for k = 1:total
+                % Recuperiamo i risultati della simulazione per il punto k
+                M = raw_M{k}; 
+                
+                % 1. Estrazione Curvatura Residua [1/m]
+                % Il Kernel calcola la curvatura finale post-molleggio.
+                % Convertiamo da 1/mm a 1/m per una lettura standard nelle mappe.
+                app.GridResults.C(k) = M.Curvature * 1000; 
+
+                % 2. Estrazione Stress Residuo Superficiale [MPa]
+                % Rappresenta lo stress massimo presente sulla pelle della lamiera.
+                app.GridResults.S(k) = M.Residual_Stress_Surface;
+
+                % 3. Verifica Integrità (Fail Mask)
+                % Confrontiamo lo stress massimo raggiunto durante tutto il processo 
+                % con il carico di rottura (Rm) definito nel materiale.
+                if isfield(M, 'Max_Total_Stress')
+                    app.GridResults.Fail(k) = M.Max_Total_Stress > base.Rm;
+                end
+
+                % 4. Nota sulla Planarità (Single Strip)
+                % In modalità "Singola Striscia", l'errore di planarità locale 
+                % rispetto alla media è nullo. Questo campo verrà popolato 
+                % correttamente solo nelle analisi Multi-Strip.
+                app.GridResults.FlatnessError(k) = 0; 
             end
-            %close(d);
-            d.Message = sprintf('%s\n\n>>> CALCOLO TERMINATO', d.Message);
+
+            % --- FASE 5: MAPPING & RESULT STORAGE ---
+            
+            % 1. Salvataggio Metadati per il Plotting
+            % Memorizziamo quali variabili sono state usate per gli assi X e Y, 
+            % così i grafici sapranno aggiornare automaticamente le etichette.
+            app.GridResults.FieldX = field_x;
+            app.GridResults.FieldY = field_y;
+
+            % 2. Selezione dell'Obiettivo di Ottimizzazione
+            % Identifichiamo quale mappa utilizzare per trovare il setup ottimale 
+            % in base alla scelta effettuata dall'utente nel dropdown.
+            target_mode = app.Drop_OptMode.Value;
+            if strcmp(target_mode, 'RES STRESS')
+                TARGET_MAP = app.GridResults.S;
+            elseif strcmp(target_mode, 'Curvature')
+                TARGET_MAP = abs(app.GridResults.C);
+            else
+                TARGET_MAP = app.GridResults.FlatnessError;
+            end
+
+            % 3. Identificazione del Punto "Migliore" sulla Mappa
+            % Troviamo le coordinate (X, Y) del punto che minimizza l'obiettivo scelto.
+            [~, idx_opt] = min(TARGET_MAP(:));
+            best_x = GRID_X(idx_opt);
+            best_y = GRID_Y(idx_opt);
+
+            % 4. Sblocco dei Pulsanti di Analisi
+            % Ora che i dati sono pronti, abilitiamo l'accesso ai dettagli dello stress e del 3D.
+            app.Btn_ShowStress.Enable = 'on';
+            app.Btn_ShowHysteresis.Enable = 'on';
+            app.Btn_Show3D.Enable = 'on';
+            app.Btn_ExportRes.Enable = 'on';
+
+            % 5. Chiusura della Barra di Progresso
             d.Value = 1;
 
-            app.updateDetailPlots(best_x, best_y, true);
-            app.Btn_ShowMat.Enable = 'on'; app.Btn_ShowStress.Enable = 'on';
-            app.Btn_ShowHysteresis.Enable = 'on'; app.Btn_Show3D.Enable = 'on'; app.Btn_Save.Enable = 'on';
-        end
+            % --- FASE 6: REFRESH DASHBOARD ---
+
+            % 1. Aggiornamento Messaggio (PRIMA di chiudere)
+            d.Message = 'Analysis complete! Displaying optimal point...';
+            d.Value = 1;
+
+            % 2. Aggiornamento Grafici
+            app.updateDetailPlots(best_x, best_y, true); 
+
+            % 3. ORA possiamo chiudere la barra
+            close(d);
+
+            catch ME
+                if isvalid(d), close(d); end
+                uialert(app.UIFigure, ME.message, 'Errore');
+            end 
+            
+            % Cleanup finale di sicurezza
+            if exist('d','var') && isvalid(d), close(d); end 
+        end 
+
 
         function p = updatePStruct(~, p, field, val)
             p.(field) = val;
@@ -419,6 +655,7 @@ classdef LevelerApp < matlab.apps.AppBase
 
             % Salva dati adattati
             app.CurrentDetailData = D;
+            
             x_lims = [-p.P, (p.N+1)*p.P];
 
 
@@ -696,61 +933,117 @@ classdef LevelerApp < matlab.apps.AppBase
             app.Btn_Show3D.Text = sprintf('Vista 3D (Err: %.1f I-U)', planar_err);
         end
 
+        % function show3DSurface(app)
+        %     if isempty(app.CurrentDetailData) || isempty(app.CurrentSheetData)
+        %         uialert(app.UIFigure, 'Nessun risultato. Fai RUN prima.', 'Dati Mancanti'); return;
+        %     end
+        % 
+        %     S = app.CurrentSheetData;
+        %     p = app.CurrentDetailData.p; % Prende i parametri del punto selezionato (Stella)
+        % 
+        %     % Setup Finestra
+        %     fig_tag = 'Result3DWindow';
+        %     f = findobj('Type', 'figure', 'Tag', fig_tag);
+        %     if isempty(f), f = uifigure('Name', 'Risultato Reale HD', 'Tag', fig_tag, 'Color', 'w'); end
+        %     figure(f); clf(f);
+        %     ax3D = uiaxes(f, 'Position', [50 50 500 350]);
+        % 
+        %     d = uiprogressdlg(f, 'Title', 'Rendering 3D', 'Message', 'Calcolo Alta Risoluzione...');
+        % 
+        %     % --- CALCOLO HD TRAMITE SOLVER ---
+        %     OptsHD.nStrips = 51; % Alta risoluzione spaziale
+        %     OptsHD.GridX = linspace(0, 2000, 150); % Griglia lungitudinale per il plot
+        %     OptsHD.GridY = linspace(-S.Geo.W/2, S.Geo.W/2, OptsHD.nStrips);
+        % 
+        %     Res = Leveler_Solver_3D(S, p, OptsHD);
+        % 
+        %     % --- RENDERING ---
+        %     % Ricostruzione Z Totale (Coil Set + Crossbow + Onde)
+        %     [X, Y] = meshgrid(OptsHD.GridX, OptsHD.GridY);
+        % 
+        %     % Espansione profili sulla griglia
+        %     K_grid = repmat(Res.Viz.K_Profile', 1, length(OptsHD.GridX));
+        %     H_grid = repmat(Res.Viz.H_Profile', 1, length(OptsHD.GridX));
+        % 
+        %     L_wave = S.Defects.L_mm; if L_wave <= 0, L_wave=500; end
+        % 
+        %     Z_Coil  = 0.5 * (K_grid/1000) .* X.^2;
+        %     Z_Cross = 0.5 * (Res.Scalar.Crossbow/1000) .* Y.^2;
+        %     Z_Wave  = (H_grid / 2) .* sin(2*pi*X/L_wave);
+        % 
+        %     Z_Tot = Z_Coil + Z_Cross + Z_Wave;
+        % 
+        %     surf(ax3D, X, Y, Z_Tot, H_grid, 'EdgeColor', 'none', 'FaceColor', 'interp');
+        % 
+        %     % Estetica
+        %     axis(ax3D, 'equal'); view(ax3D, [-45 30]); colormap(ax3D, 'jet');
+        %     camlight(ax3D, 'headlight'); lighting(ax3D, 'gouraud');
+        %     title(ax3D, sprintf('Flatness: %.1f I-Units | H_{res}: %.2f mm', Res.Scalar.Flatness, max(Res.Viz.H_Profile)));
+        %     xlabel(ax3D,'L [mm]'); ylabel(ax3D,'W [mm]'); zlabel(ax3D,'Z [mm]');
+        %     colorbar(ax3D, 'Label', 'Ampiezza Onda Residua [mm]');
+        % 
+        %     % Salviamo il risultato per l'export
+        %     app.SimulationResults.Final = Res;
+        % 
+        %     close(d);
+        % end
+
+
         function show3DSurface(app)
+            % 1. Verifica che i dati siano presenti (selezionati sulla mappa)
             if isempty(app.CurrentDetailData) || isempty(app.CurrentSheetData)
-                uialert(app.UIFigure, 'Nessun risultato. Fai RUN prima.', 'Dati Mancanti'); return;
+                uialert(app.UIFigure, 'Seleziona prima un punto sulla mappa (fai click)!', 'Dati Mancanti');
+                return;
             end
 
-            S = app.CurrentSheetData;
-            p = app.CurrentDetailData.p; % Prende i parametri del punto selezionato (Stella)
-
-            % Setup Finestra
+            D = app.CurrentDetailData; % Risultato della simulazione (Kernel)
+            S = app.CurrentSheetData;   % Specifiche del materiale
+            
+            % 2. Setup Finestra di Visualizzazione
             fig_tag = 'Result3DWindow';
             f = findobj('Type', 'figure', 'Tag', fig_tag);
-            if isempty(f), f = uifigure('Name', 'Risultato Reale HD', 'Tag', fig_tag, 'Color', 'w'); end
+            if isempty(f), f = uifigure('Name', 'Final Leveled Sheet Geometry', 'Tag', fig_tag, 'Color', 'w'); end
             figure(f); clf(f);
-            ax3D = uiaxes(f, 'Position', [50 50 500 350]);
+            ax = uiaxes(f);
 
-            d = uiprogressdlg(f, 'Title', 'Rendering 3D', 'Message', 'Calcolo Alta Risoluzione...');
+            % 3. Generazione Geometria Finale (Post-Spianatura)
+            % Creiamo un foglio di 2 metri (2000mm) per visualizzare la curvatura residua
+            L_plot = 2000;
+            W = S.Geo.W;
+            [X, Y] = meshgrid(linspace(0, L_plot, 50), linspace(-W/2, W/2, 30));
+
+            % Curvatura residua dal Kernel [1/mm]
+            k_res = D.Curvature; 
+
+            % Calcolo Z (Forma cilindrica/parabolica finale basata sulla fisica del molleggio)
+            % Z = 1/2 * K * X^2
+            Z = 0.5 * k_res * X.^2;
+
+            % 4. Rappresentazione Stress Residuo
+            % Usiamo lo stress residuo superficiale (MPa) per la colorazione della pelle
+            % Poiché è una singola striscia, lo stress è costante su tutta la faccia
+            sig_surf = D.Residual_Stress_Surface;
+            C = ones(size(Z)) * sig_surf;
+
+            % Rendering della superficie
+            surf(ax, X, Y, Z, C, 'FaceColor', 'interp', 'EdgeColor', 'none');
+
+            % 5. Estetica e Annotazioni Tecniche
+            axis(ax, 'equal'); view(ax, [-45 30]);
+            colormap(ax, 'jet'); 
+            cb = colorbar(ax); cb.Label.String = 'Surface Residual Stress [MPa]';
             
-            % --- CALCOLO HD TRAMITE SOLVER ---
-            OptsHD.nStrips = 51; % Alta risoluzione spaziale
-            OptsHD.GridX = linspace(0, 2000, 150); % Griglia lungitudinale per il plot
-            OptsHD.GridY = linspace(-S.Geo.W/2, S.Geo.W/2, OptsHD.nStrips);
-            
-            Res = Leveler_Solver_3D(S, p, OptsHD);
-            
-            % --- RENDERING ---
-            % Ricostruzione Z Totale (Coil Set + Crossbow + Onde)
-            [X, Y] = meshgrid(OptsHD.GridX, OptsHD.GridY);
-            
-            % Espansione profili sulla griglia
-            K_grid = repmat(Res.Viz.K_Profile', 1, length(OptsHD.GridX));
-            H_grid = repmat(Res.Viz.H_Profile', 1, length(OptsHD.GridX));
-            
-            L_wave = S.Defects.L_mm; if L_wave <= 0, L_wave=500; end
-            
-            Z_Coil  = 0.5 * (K_grid/1000) .* X.^2;
-            Z_Cross = 0.5 * (Res.Scalar.Crossbow/1000) .* Y.^2;
-            Z_Wave  = (H_grid / 2) .* sin(2*pi*X/L_wave);
-            
-            Z_Tot = Z_Coil + Z_Cross + Z_Wave;
-            
-            surf(ax3D, X, Y, Z_Tot, H_grid, 'EdgeColor', 'none', 'FaceColor', 'interp');
-            
-            % Estetica
-            axis(ax3D, 'equal'); view(ax3D, [-45 30]); colormap(ax3D, 'jet');
-            camlight(ax3D, 'headlight'); lighting(ax3D, 'gouraud');
-            title(ax3D, sprintf('Flatness: %.1f I-Units | H_{res}: %.2f mm', Res.Scalar.Flatness, max(Res.Viz.H_Profile)));
-            xlabel(ax3D,'L [mm]'); ylabel(ax3D,'W [mm]'); zlabel(ax3D,'Z [mm]');
-            colorbar(ax3D, 'Label', 'Ampiezza Onda Residua [mm]');
-            
-            % Salviamo il risultato per l'export
-            app.SimulationResults.Final = Res;
-            
-            close(d);
+            title(ax, sprintf('Final Leveled Sheet | K_{res}: %.3f 1/m', k_res * 1000));
+            xlabel(ax, 'Length [mm]'); ylabel(ax, 'Width [mm]'); zlabel(ax, 'Z [mm]');
+            grid(ax, 'on');
+
+            % Alert Visivo in caso di Rottura del Materiale (Failure check)
+            if isfield(D, 'Max_Total_Stress') && D.Max_Total_Stress > S.Mat.Rm
+                text(ax, L_plot/2, 0, max(Z(:))*1.2, 'MATERIAL FAILURE!', ...
+                    'Color', 'r', 'FontSize', 22, 'FontWeight', 'bold', 'HorizontalAlignment', 'center');
+            end
         end
-
+        
         % --- POPUP: STRESS RESIDUO + SOTTO CARICO (SENZA LEGENDA) ---
         function openStressWindow(app)
             if isempty(app.CurrentDetailData), return; end
@@ -1177,8 +1470,8 @@ classdef LevelerApp < matlab.apps.AppBase
                 %i_units = 0;
                 %if isfield(S.Defects, 'I_Units'), i_units = S.Defects.I_Units; end
 
-                infoStr = sprintf("Sheet Loaded \nThickness: %.1f mm | Width: %.0f mm\nSy: %.0f MPa | E: %.0f MPa\nDefact: K0=%.4f", ...
-                    S.Geo.t, S.Geo.W, S.Mat.Sy, S.Mat.E, S.Defects.K0_Geo);
+                infoStr = sprintf("Sheet Loaded \nThickness: %.1f mm | Width: %.0f mm\nSy: %.0f MPa | E: %.0f MPa\nDefect: K0=%.2f 1/mm", ...
+                    S.Geo.t, S.Geo.W, S.Mat.Sy, S.Mat.E, S.Defects.K0_Geo * 1000);
 
 
                 app.Lbl_SheetInfo.Text = infoStr;
