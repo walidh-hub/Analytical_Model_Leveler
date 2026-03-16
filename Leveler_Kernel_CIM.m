@@ -437,6 +437,6 @@ function [Metrics, Data] = Leveler_Kernel_CIM(p)
     Data.Plastic_Profile = plastic_profile;
     Data.Alpha_Final = alpha_current;
     Data.Eps_Pl_Final = eps_pl_cum;
-    Data.Avg_Elongation_Pct = Geometric_Elongation_Pct + (mean(eps_pl_cum) * 100);
+    Data.Avg_Elongation_Pct = Geometric_Elongation_Pct;
     Data.Max_Total_Stress = Metrics.Max_Stress;
 end

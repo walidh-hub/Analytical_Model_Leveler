@@ -999,13 +999,10 @@ classdef LevelerApp < matlab.apps.AppBase
             
             max_tot = 0; if isfield(D, 'Max_Total_Stress'), max_tot = D.Max_Total_Stress; end
             max_pl = 0;  if isfield(D, 'Plastic_Profile'), max_pl = max(D.Plastic_Profile); end
-            
-            alpha_surf = 0; ep_surf = 0;
-            
-            % Estrazione valori sulle fibre esterne (Pelle della lamiera)
-            if isfield(D, 'Alpha_Final'), alpha_surf = max(abs(D.Alpha_Final([1, end]))); end
-            if isfield(D, 'Eps_Pl_Final'), ep_surf = max(D.Eps_Pl_Final([1, end])); end
-           
+            alpha_surf = 0; if isfield(D, 'Alpha_Final'), alpha_surf = max(abs(D.Alpha_Final([1, end]))); end
+            ep_surf = 0; if isfield(D, 'Eps_Pl_Final'), ep_surf = max(D.Eps_Pl_Final([1, end])); end
+            avg_elong = 0; if isfield(D, 'Avg_Elongation_Pct'), avg_elong = D.Avg_Elongation_Pct; end
+            if isfield(S.Mat, 'Rm'), margin_Rm = S.Mat.Rm - max_tot; end
 
             % Costruzione Dati Tabella (con 3a colonna "Info")
             tableData = {
@@ -1015,13 +1012,9 @@ classdef LevelerApp < matlab.apps.AppBase
                 'Max Penetr. Plastica', sprintf('%.1f %%', max_pl), '[ ? ]';
                 'Backstress (\alpha) Pelle', sprintf('%.1f MPa', alpha_surf), '';
                 'Def. Plastica Cumulata', sprintf('%.3f %%', ep_surf * 100), '[ ? ]';
+                'Allungamento Netto', sprintf('%.4f %%', avg_elong), '[ ? ]';
+                'Margine a Rottura (Rm)', sprintf('%.1f MPa', margin_Rm), '';
             };
-            
-            % Aggiunta Margine Sicurezza
-            if isfield(S.Mat, 'Rm')
-                margin_Rm = S.Mat.Rm - max_tot;
-                tableData(end+1,:) = {'Margine a Rottura (Rm)', sprintf('%.1f MPa', margin_Rm), ''};
-            end
 
             % --- CREAZIONE PANNELLO E TABELLA UI ---
             pnlInfo = uipanel(gl, 'Title', 'Stato Finale (Dati Kernel)', 'FontWeight', 'bold', 'FontSize', 14);
@@ -1063,6 +1056,12 @@ classdef LevelerApp < matlab.apps.AppBase
                                        'Ad esempio, un valore dell''80%% indica che solo il 20%% centrale (il "nucleo" o asse neutro) ' ...
                                        'è rimasto in campo elastico, garantendo una buona efficacia di spianatura.']);
                         uialert(fig, msg, 'Info: Penetrazione Plastica', 'Icon', 'info');
+                    elseif contains(paramName, 'Allungamento Netto')
+                        msg = sprintf(['Rappresenta la variazione percentuale della lunghezza fisica (macroscopica) della lamiera ' ...
+                                       'rispetto allo stato iniziale.\n\n' ...
+                                       'È calcolato sommando l''allungamento geometrico (dovuto al percorso serpeggiante tra i rulli) ' ...
+                                       'e la media della deformazione plastica permanente su tutta la sezione.']);
+                        uialert(fig, msg, 'Info: Allungamento Netto', 'Icon', 'info');
                     end
                 end
             end
