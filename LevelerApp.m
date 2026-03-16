@@ -917,6 +917,16 @@ classdef LevelerApp < matlab.apps.AppBase
             app.Btn_Show3D.Enable = 'on';
             % Ora il numero sul bottone sarà identico a quello che vedi colorato nella mappa
             app.Btn_Show3D.Text = sprintf('Vista 3D (Err: %.1f I-U)', planar_err);
+            
+            % Sincronizzazione visiva: blocca la larghezza e collega lo zoom
+            linkaxes([app.Ax_Machine, app.Ax_Curvature, app.Ax_Plastic], 'x');
+            
+            if isfield(D, 'x') && ~isempty(D.x)
+                % Forza i limiti in modo uguale per tutti, dando un po' di margine ai lati
+                x_min = min(D.x) - p.P;
+                x_max = max(D.x) + p.P;
+                app.Ax_Machine.XLim = [x_min, x_max];
+            end
         end
 
         % function show3DSurface(app)
@@ -1908,21 +1918,42 @@ classdef LevelerApp < matlab.apps.AppBase
             app.DashboardGrid.ColumnWidth = {'1.2x', '1x'};
 
             % Sottogriglia Sinistra (3 Grafici a cascata)
-            LeftGrid = uigridlayout(app.DashboardGrid, [3, 1]);
-            LeftGrid.RowHeight = {'1.2x', '1x', '1x'};
-            LeftGrid.Padding = [0 0 0 0];
+            LeftPanel = uipanel(app.DashboardGrid, 'BorderType', 'none');
+            LeftPanel.Layout.Row = 1;
+            LeftPanel.Layout.Column = 1;
+            
+            LeftLayout = tiledlayout(LeftPanel, 3, 1, 'TileSpacing', 'compact', 'Padding', 'tight');
 
             % 1. Macchina
-            app.Ax_Machine = uiaxes(LeftGrid);
+            app.Ax_Machine = uiaxes(LeftLayout);
+            app.Ax_Machine.Layout.Tile = 1;
             app.Ax_Machine.Title.String = 'Linea Elastica';
 
             % 2. Curvatura
-            app.Ax_Curvature = uiaxes(LeftGrid);
+            app.Ax_Curvature = uiaxes(LeftLayout);
+            app.Ax_Curvature.Layout.Tile = 2;
             app.Ax_Curvature.Title.String = 'Curvatura Longitudinale';
 
             % 3. Plasticità
-            app.Ax_Plastic = uiaxes(LeftGrid);
+            app.Ax_Plastic = uiaxes(LeftLayout);
+            app.Ax_Plastic.Layout.Tile = 3;
             app.Ax_Plastic.Title.String = 'Tasso Plasticizzazione';
+
+            % LeftGrid = uigridlayout(app.DashboardGrid, [3, 1]);
+            % LeftGrid.RowHeight = {'1.2x', '1x', '1x'};
+            % LeftGrid.Padding = [0 0 0 0];
+            % 
+            % % 1. Macchina
+            % app.Ax_Machine = uiaxes(LeftGrid);
+            % app.Ax_Machine.Title.String = 'Linea Elastica';
+            % 
+            % % 2. Curvatura
+            % app.Ax_Curvature = uiaxes(LeftGrid);
+            % app.Ax_Curvature.Title.String = 'Curvatura Longitudinale';
+            % 
+            % % 3. Plasticità
+            % app.Ax_Plastic = uiaxes(LeftGrid);
+            % app.Ax_Plastic.Title.String = 'Tasso Plasticizzazione';
 
             % --- COLONNA DESTRA (Mappe + Slider) ---
             RightPanel = uigridlayout(app.DashboardGrid, [2, 2]);
