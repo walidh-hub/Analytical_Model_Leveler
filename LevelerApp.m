@@ -870,54 +870,11 @@ classdef LevelerApp < matlab.apps.AppBase
             ax.Title.String = '3. Tasso di Plasticizzazione (Penetrazione %)';
             ax.XLabel.String = 'Posizione [mm]';
             ax.YLabel.String = '% Sezione Snervata';
-
-
-            % % --- 4. Profilo Trasversale (Popup) ---
-            % % Questo blocco ora usa la 'p' corretta del punto selezionato
-            % y_plot = linspace(-p.W/2, p.W/2, 21);
-            % stress_y = zeros(size(y_plot));
-            % 
-            % if isOptimized && strcmp(app.Btn_Show3D.Enable, 'on') && isfield(app.GridResults, 'FlatnessError')
-            %     % Se abbiamo già i dati 3D dall'analisi, usali invece di ricalcolare
-            % end
-            % 
-            % for s = 1:length(y_plot)
-            %     ps = p; ps.y_coord = y_plot(s);
-            %     [rs, ~] = Leveler_Kernel_CIM(ps);
-            %     stress_y(s) = rs.Max_Stress;
-            % end
-            % 
-            % % Usa una figura con tag fisso per non aprirne mille
-            % fig_tag = 'TransverseProfileFig';
-            % fig_h = findobj('Type', 'figure', 'Tag', fig_tag);
-            % if isempty(fig_h)
-            %     fig_h = figure('Name','Profilo Trasversale', 'Tag', fig_tag, 'NumberTitle','off','MenuBar','none', 'Position', [900 500 400 300]);
-            % else
-            %     figure(fig_h);
-            % end
-            % 
-            % ax_prof = gca(fig_h); cla(ax_prof); grid(ax_prof, 'on'); hold(ax_prof, 'on');
-            % plot(ax_prof, y_plot, stress_y, 'b-o', 'LineWidth', 1.5, 'MarkerSize', 4);
-            % xlabel(ax_prof, 'Larghezza y [mm]'); ylabel(ax_prof, 'Residual Stress [MPa]');
-            % title(ax_prof, sprintf('Profilo Trasversale (Fc=%.1f, Fl=%.1f)', p.Fc, p.Fl));
-
-            % % Calcolo Planarità Residua (I-Units)
-            % xlabel(ax_prof, 'Larghezza y [mm]'); ylabel(ax_prof, 'Residual Stress [MPa]');
-            % title(ax_prof, sprintf('Profilo Trasversale (Fc=%.1f, Fl=%.1f)', p.Fc, p.Fl));
-
-            % --- CORREZIONE: RECUPERO PLANARITÀ COERENTE ---
-            % Invece di ricalcolarla qui in modo approssimato, la leggiamo dalla Mappa del Solver
-            if isfield(res, 'FlatnessError')
-                % Interpola il valore esatto della mappa alle coordinate correnti (sel_x, sel_y)
-                planar_err = interp2(res.X, res.Y, res.FlatnessError, sel_x, sel_y);
-            else
-                planar_err = 0;
-            end
             
             app.Btn_Show3D.Enable = 'on';
             % Ora il numero sul bottone sarà identico a quello che vedi colorato nella mappa
-            app.Btn_Show3D.Text = sprintf('Vista 3D (Err: %.1f I-U)', planar_err);
-            
+            app.Btn_Show3D.Text = sprintf('Final Sheet view');
+
             % Sincronizzazione visiva: blocca la larghezza e collega lo zoom
             linkaxes([app.Ax_Machine, app.Ax_Curvature, app.Ax_Plastic], 'x');
             
@@ -929,62 +886,6 @@ classdef LevelerApp < matlab.apps.AppBase
             end
         end
 
-        % function show3DSurface(app)
-        %     if isempty(app.CurrentDetailData) || isempty(app.CurrentSheetData)
-        %         uialert(app.UIFigure, 'Nessun risultato. Fai RUN prima.', 'Dati Mancanti'); return;
-        %     end
-        % 
-        %     S = app.CurrentSheetData;
-        %     p = app.CurrentDetailData.p; % Prende i parametri del punto selezionato (Stella)
-        % 
-        %     % Setup Finestra
-        %     fig_tag = 'Result3DWindow';
-        %     f = findobj('Type', 'figure', 'Tag', fig_tag);
-        %     if isempty(f), f = uifigure('Name', 'Risultato Reale HD', 'Tag', fig_tag, 'Color', 'w'); end
-        %     figure(f); clf(f);
-        %     ax3D = uiaxes(f, 'Position', [50 50 500 350]);
-        % 
-        %     d = uiprogressdlg(f, 'Title', 'Rendering 3D', 'Message', 'Calcolo Alta Risoluzione...');
-        % 
-        %     % --- CALCOLO HD TRAMITE SOLVER ---
-        %     OptsHD.nStrips = 51; % Alta risoluzione spaziale
-        %     OptsHD.GridX = linspace(0, 2000, 150); % Griglia lungitudinale per il plot
-        %     OptsHD.GridY = linspace(-S.Geo.W/2, S.Geo.W/2, OptsHD.nStrips);
-        % 
-        %     Res = Leveler_Solver_3D(S, p, OptsHD);
-        % 
-        %     % --- RENDERING ---
-        %     % Ricostruzione Z Totale (Coil Set + Crossbow + Onde)
-        %     [X, Y] = meshgrid(OptsHD.GridX, OptsHD.GridY);
-        % 
-        %     % Espansione profili sulla griglia
-        %     K_grid = repmat(Res.Viz.K_Profile', 1, length(OptsHD.GridX));
-        %     H_grid = repmat(Res.Viz.H_Profile', 1, length(OptsHD.GridX));
-        % 
-        %     L_wave = S.Defects.L_mm; if L_wave <= 0, L_wave=500; end
-        % 
-        %     Z_Coil  = 0.5 * (K_grid/1000) .* X.^2;
-        %     Z_Cross = 0.5 * (Res.Scalar.Crossbow/1000) .* Y.^2;
-        %     Z_Wave  = (H_grid / 2) .* sin(2*pi*X/L_wave);
-        % 
-        %     Z_Tot = Z_Coil + Z_Cross + Z_Wave;
-        % 
-        %     surf(ax3D, X, Y, Z_Tot, H_grid, 'EdgeColor', 'none', 'FaceColor', 'interp');
-        % 
-        %     % Estetica
-        %     axis(ax3D, 'equal'); view(ax3D, [-45 30]); colormap(ax3D, 'jet');
-        %     camlight(ax3D, 'headlight'); lighting(ax3D, 'gouraud');
-        %     title(ax3D, sprintf('Flatness: %.1f I-Units | H_{res}: %.2f mm', Res.Scalar.Flatness, max(Res.Viz.H_Profile)));
-        %     xlabel(ax3D,'L [mm]'); ylabel(ax3D,'W [mm]'); zlabel(ax3D,'Z [mm]');
-        %     colorbar(ax3D, 'Label', 'Ampiezza Onda Residua [mm]');
-        % 
-        %     % Salviamo il risultato per l'export
-        %     app.SimulationResults.Final = Res;
-        % 
-        %     close(d);
-        % end
-
-
         function show3DSurface(app)
             if isempty(app.CurrentDetailData) || isempty(app.CurrentSheetData)
                 uialert(app.UIFigure, 'Seleziona prima un punto sulla mappa!', 'Dati Mancanti');
@@ -994,15 +895,27 @@ classdef LevelerApp < matlab.apps.AppBase
             D = app.CurrentDetailData; 
             S = app.CurrentSheetData;  
 
+            % Setup Finestra (più grande e pulita)
             fig_tag = 'Result3DWindow';
             f = findobj('Type', 'figure', 'Tag', fig_tag);
-            if isempty(f), f = uifigure('Name', 'Final Leveled Sheet Geometry', 'Tag', fig_tag, 'Color', 'w'); end
+            if isempty(f)
+                f = uifigure('Name', 'Final Leveled Sheet Geometry', 'Tag', fig_tag, ...
+                             'Color', 'w', 'Position', [150 150 900 600]); 
+            end
             figure(f); clf(f);
-            ax = uiaxes(f);
+            
+            % Layout diviso in 2 colonne: Grafico 3D (sinistra) e Tabella (destra)
+            gl = uigridlayout(f, [1 2], 'ColumnWidth', {'1x', 340}, 'Padding', [10 10 10 10]);
+            ax = uiaxes(gl);
+            ax.Layout.Row = 1; ax.Layout.Column = 1;
 
+            % Parametri Geometrici
             L_plot = 2000; 
             W = S.Geo.W;
-            [X, Y] = meshgrid(linspace(0, L_plot, 50), linspace(-W/2, W/2, 30));
+            t_thick = S.Geo.t; % Spessore reale dal file sheet
+
+            % Mesh ad alta risoluzione
+            [X, Y] = meshgrid(linspace(0, L_plot, 100), linspace(-W/2, W/2, 50));
 
             if isfield(D, 'Curvature')
                 k_res = D.Curvature; 
@@ -1010,7 +923,8 @@ classdef LevelerApp < matlab.apps.AppBase
                 k_res = 0; 
             end
 
-            Z = 0.5 * k_res * (X.^2);
+            % Asse neutro
+            Z_mid = 0.5 * k_res * (X.^2);
 
             if isfield(D, 'Residual_Stress_Surface')
                 sig_surf = D.Residual_Stress_Surface;
@@ -1018,38 +932,143 @@ classdef LevelerApp < matlab.apps.AppBase
                 sig_surf = 0;
             end
             
-            C = ones(size(Z)) * sig_surf;
+            C = ones(size(Z_mid)) * sig_surf;
 
-            surf(ax, X, Y, Z, C, 'FaceColor', 'interp', 'EdgeColor', 'none');
-
-            axis(ax, 'equal'); 
-            view(ax, [-45 30]);
-            colormap(ax, 'jet'); 
-            cb = colorbar(ax); cb.Label.String = 'Surface Residual Stress [MPa]';
+            % --- RENDERING SOLIDO 3D ---
+            hold(ax, 'on');
             
-            % SINCRONIZZAZIONE SCALA COLORI CON LA MAPPA PRINCIPALE
+            % Estradosso (Sopra) e Intradosso (Sotto)
+            surf(ax, X, Y, Z_mid + t_thick/2, C, 'FaceColor', 'interp', 'EdgeColor', 'none');
+            surf(ax, X, Y, Z_mid - t_thick/2, C, 'FaceColor', 'interp', 'EdgeColor', 'none');
+            
+            % Bordi Laterali e Frontali (Pareti grigio scuro per far risaltare il solido)
+            edge_col = [0.3 0.3 0.3];
+            surf(ax, [X(1,:); X(1,:)], [Y(1,:); Y(1,:)], [Z_mid(1,:)-t_thick/2; Z_mid(1,:)+t_thick/2], 'FaceColor', edge_col, 'EdgeColor', 'none'); % Dietro
+            surf(ax, [X(end,:); X(end,:)], [Y(end,:); Y(end,:)], [Z_mid(end,:)-t_thick/2; Z_mid(end,:)+t_thick/2], 'FaceColor', edge_col, 'EdgeColor', 'none'); % Davanti
+            surf(ax, [X(:,1)'; X(:,1)'], [Y(:,1)'; Y(:,1)'], [Z_mid(:,1)'-t_thick/2; Z_mid(:,1)'+t_thick/2], 'FaceColor', edge_col, 'EdgeColor', 'none'); % Lato SX
+            surf(ax, [X(:,end)'; X(:,end)'], [Y(:,end)'; Y(:,end)'], [Z_mid(:,end)'-t_thick/2; Z_mid(:,end)'+t_thick/2], 'FaceColor', edge_col, 'EdgeColor', 'none'); % Lato DX
+
+            % --- ESTETICA, LUCI E MATERIALI ---
+            axis(ax, 'equal'); 
+            axis(ax, 'tight');
+            view(ax, [-45 30]);
+            grid(ax, 'on'); box(ax, 'on');
+            
+            % Effetto metallico realistico
+            colormap(ax, 'jet'); 
+            lighting(ax, 'gouraud');
+            material(ax, 'metal');
+            camlight(ax, 'headlight');
+            camlight(ax, 'left');
+            
+            % Colorbar potenziata
+            cb = colorbar(ax); 
+            cb.Label.String = 'Surface Residual Stress [MPa]';
+            cb.Label.FontWeight = 'bold';
+            cb.Label.FontSize = 11;
+            
+            % Sincronizzazione Colori
             if ~isempty(app.GridResults) && isfield(app.GridResults, 'S')
                 min_S = min(app.GridResults.S(:));
                 max_S = max(app.GridResults.S(:));
                 if max_S > min_S
                     clim(ax, [min_S, max_S]);
                 else
-                    clim(ax, [min_S-5, max_S+5]); % Fallback se la mappa è tutta piatta
+                    clim(ax, [min_S-5, max_S+5]); 
                 end
             else
                 limit_val = max(abs(sig_surf), 5);
                 clim(ax, [-limit_val, limit_val]);
             end
             
-            title(ax, sprintf('Final Leveled Sheet | K_{res}: %.3f [1/m] | \\sigma_{res}: %.1f [MPa]', k_res * 1000, sig_surf));
-            xlabel(ax, 'Length [mm]'); ylabel(ax, 'Width [mm]'); zlabel(ax, 'Z [mm]');
-            grid(ax, 'on');
+            % Titoli e Assi
+            title(ax, sprintf('FINAL LEVELED SHEET\nK_{res}: %.3f [1/m]  |  \\sigma_{res}: %.1f [MPa]', k_res * 1000, sig_surf), 'FontSize', 14);
+            xlabel(ax, 'Length [mm]', 'FontWeight', 'bold'); 
+            ylabel(ax, 'Width [mm]', 'FontWeight', 'bold'); 
+            zlabel(ax, 'Z [mm]', 'FontWeight', 'bold');
 
+            % Allarme Rottura Materiale Migliorato
             if isfield(D, 'Max_Total_Stress') && isfield(S.Mat, 'Rm') && D.Max_Total_Stress > S.Mat.Rm
-                text(ax, L_plot/2, 0, max(Z(:)) + 10, 'MATERIAL FAILURE!', ...
-                    'Color', 'r', 'FontSize', 22, 'FontWeight', 'bold', 'HorizontalAlignment', 'center');
+                text(ax, L_plot/2, 0, max(Z_mid(:)) + t_thick*5, 'MATERIAL FAILURE!', ...
+                    'Color', 'r', 'FontSize', 26, 'FontWeight', 'bold', ...
+                    'HorizontalAlignment', 'center', 'BackgroundColor', [1 1 1 0.8], 'EdgeColor', 'r');
+            end
+
+            % --- ESTRAZIONE DATI DIRETTAMENTE DAL KERNEL ---
+            % Nessun ricalcolo fisico: leggiamo solo la struttura D
+            
+            max_tot = 0; if isfield(D, 'Max_Total_Stress'), max_tot = D.Max_Total_Stress; end
+            max_pl = 0;  if isfield(D, 'Plastic_Profile'), max_pl = max(D.Plastic_Profile); end
+            
+            alpha_surf = 0; ep_surf = 0;
+            
+            % Estrazione valori sulle fibre esterne (Pelle della lamiera)
+            if isfield(D, 'Alpha_Final'), alpha_surf = max(abs(D.Alpha_Final([1, end]))); end
+            if isfield(D, 'Eps_Pl_Final'), ep_surf = max(D.Eps_Pl_Final([1, end])); end
+           
+
+            % Costruzione Dati Tabella (con 3a colonna "Info")
+            tableData = {
+                'Curvatura Residua', sprintf('%.3f [1/m]', k_res * 1000), '';
+                'Stress Res. Superficie', sprintf('%.1f MPa', sig_surf), '';
+                'Max Stress Processo', sprintf('%.1f MPa', max_tot), '';
+                'Max Penetr. Plastica', sprintf('%.1f %%', max_pl), '[ ? ]';
+                'Backstress (\alpha) Pelle', sprintf('%.1f MPa', alpha_surf), '';
+                'Def. Plastica Cumulata', sprintf('%.3f %%', ep_surf * 100), '[ ? ]';
+            };
+            
+            % Aggiunta Margine Sicurezza
+            if isfield(S.Mat, 'Rm')
+                margin_Rm = S.Mat.Rm - max_tot;
+                tableData(end+1,:) = {'Margine a Rottura (Rm)', sprintf('%.1f MPa', margin_Rm), ''};
+            end
+
+            % --- CREAZIONE PANNELLO E TABELLA UI ---
+            pnlInfo = uipanel(gl, 'Title', 'Stato Finale (Dati Kernel)', 'FontWeight', 'bold', 'FontSize', 14);
+            pnlInfo.Layout.Row = 1; pnlInfo.Layout.Column = 2;
+            
+            glInfo = uigridlayout(pnlInfo, [1, 1], 'Padding', [5 5 5 5]);
+            
+            tInfo = uitable(glInfo, 'Data', tableData, 'ColumnName', {'Parametro', 'Valore', 'Info'}, ...
+                'RowName', [], 'FontName', 'Consolas', 'FontSize', 12);
+            tInfo.Layout.Row = 1; tInfo.Layout.Column = 1;
+            tInfo.ColumnWidth = {'fit', '1x', 45};
+            
+            % --- CALLBACK CLICK SULLA TABELLA ---
+            tInfo.CellSelectionCallback = @(src, event) handleInfoClick(event, f, tableData);
+            
+            hold(ax, 'off');
+            
+            % =========================================================
+            % FUNZIONE ANNIDATA: Gestione dei Popup Info (Info Point)
+            % =========================================================
+            function handleInfoClick(event, fig, data)
+                if isempty(event.Indices), return; end
+                r = event.Indices(1); % Riga cliccata
+                c = event.Indices(2); % Colonna cliccata
+                
+                if c == 3 % Se l'utente clicca sulla colonna "Info" [ ? ]
+                    paramName = data{r, 1};
+                    
+                    if contains(paramName, 'Def. Plastica Cumulata')
+                        msg = sprintf(['Non misura l''allungamento netto del foglio, ma il "chilometraggio plastico" o lavoro interno.\n\n' ...
+                                       'È la somma assoluta di tutte le trazioni e compressioni plastiche subite dalla fibra ' ...
+                                       'piegandosi alternativamente sotto i rulli.\n\n' ...
+                                       'Valori alti indicano che il materiale si è fortemente "impastato" e incrudito internamente.']);
+                        uialert(fig, msg, 'Info: Def. Plastica Cumulata', 'Icon', 'info');
+                    
+                    elseif contains(paramName, 'Max Penetr. Plastica')
+                        msg = sprintf(['Indica la percentuale massima dello spessore della lamiera che ha superato ' ...
+                                       'il limite di snervamento elastico (Sy) durante il processo.\n\n' ...
+                                       'Ad esempio, un valore dell''80%% indica che solo il 20%% centrale (il "nucleo" o asse neutro) ' ...
+                                       'è rimasto in campo elastico, garantendo una buona efficacia di spianatura.']);
+                        uialert(fig, msg, 'Info: Penetrazione Plastica', 'Icon', 'info');
+                    end
+                end
             end
         end
+
+
         % --- POPUP: STRESS RESIDUO + SOTTO CARICO (SENZA LEGENDA) ---
         function openStressWindow(app)
             if isempty(app.CurrentDetailData), return; end
@@ -1347,7 +1366,33 @@ classdef LevelerApp < matlab.apps.AppBase
             % 4. CALCOLO GEOMETRIA "ENHANCED" (Come SheetSpecApp riga 159)
             % Nota il fattore * 10 su H e il K0 diviso per 1000 se non già fatto
             % Nel generatore K0 è salvato in unità base, qui assumiamo coerenza
-            Z_geo = 0.5 * S.Defects.K0_Geo * X.^2 + 0.5 * S.Defects.K_Trans_Geo * Y.^2;
+            %Z_geo = 0.5 * S.Defects.K0_Geo * X.^2 + 0.5 * S.Defects.K_Trans_Geo * Y.^2;
+
+            % -- A. Curvatura Longitudinale (Coil Set) esatta --
+            K0 = S.Defects.K0_Geo;
+            if abs(K0) > 1e-9
+                R = 1/K0;
+                % Calcolo esatto arco di cerchio (evita radici immaginarie)
+                Z_Coil = R - sign(R) * sqrt(max(0, R^2 - X.^2));
+                
+                % "Nascondi" i punti oltre il raggio (se la lamiera si chiude su se stessa)
+                Z_Coil(X > abs(R)) = NaN; 
+            else
+                Z_Coil = 0;
+            end
+
+            % -- B. Crossbow Trasversale esatto --
+            KT = S.Defects.K_Trans_Geo;
+            if abs(KT) > 1e-9
+                RT = 1/KT;
+                % Calcolo esatto arco per la larghezza (Y)
+                Z_Cross = RT - sign(RT) * sqrt(max(0, RT^2 - Y.^2));
+                Z_Cross(abs(Y) > abs(RT)) = NaN;
+            else
+                Z_Cross = 0;
+            end
+            
+            Z_geo = Z_Coil + Z_Cross;
 
             % *** IL TRUCCO VISIVO DEL GENERATORE ***
             % Moltiplica H per 10 per esasperare il difetto nel grafico
