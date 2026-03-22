@@ -55,7 +55,7 @@ classdef LevelerApp < matlab.apps.AppBase
         function prepareAnalysis(app)
             % Controllo preliminare
             if isempty(app.CurrentSheetData)
-                uialert(app.UIFigure, 'You must updload a sheet (.sheet) to simulate!', 'Missing Data');
+                uialert(app.UIFigure, 'You must upload a sheet (.sheet) to simulate!', 'Missing Data');
                 return;
             end
 
